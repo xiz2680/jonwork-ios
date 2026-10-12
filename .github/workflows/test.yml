@@ -1,0 +1,108 @@
+name: Test
+
+# This workflow runs unit tests on pull requests, and online E2E tests
+# when the FLOWDOWN_ONLINE_E2E_TOKEN and FLOWDOWN_ONLINE_E2E_ENDPOINT
+# secrets are available. Responses coverage is opt-in via
+# FLOWDOWN_ONLINE_E2E_ENDPOINT_RESPONSES or FLOWDOWN_ONLINE_E2E_ENABLE_RESPONSES.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "FlowDown/**"
+      - "Frameworks/**"
+      - "FlowDownUnitTests/**"
+      - "Resources/**"
+      - "FlowDown.xcodeproj/**"
+      - "FlowDown.xcworkspace/**"
+      - ".github/workflows/test.yml"
+      - "Makefile"
+      - "Package.resolved"
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+
+jobs:
+  test:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'housekeeping/') }}
+    name: Unit Tests
+    runs-on: macos-26
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Newest Xcode
+        run: |
+          chmod +x Resources/DevKit/scripts/select_newest_xcode.sh
+          ./Resources/DevKit/scripts/select_newest_xcode.sh
+
+      - name: Install Metal Toolchain
+        run: make install-metal-toolchain
+
+      - name: Resolve Packages
+        run: make package-resolve
+
+      - name: Run Unit Tests
+        run: make test-unit
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/*/Logs/Test/*.xcresult
+          if-no-files-found: warn
+          retention-days: 7
+
+  online-e2e:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'housekeeping/') }}
+    name: Online E2E
+    needs: test
+    runs-on: macos-26
+    env:
+      FLOWDOWN_ONLINE_E2E_TOKEN: ${{ secrets.FLOWDOWN_ONLINE_E2E_TOKEN }}
+      FLOWDOWN_ONLINE_E2E_ENDPOINT: ${{ secrets.FLOWDOWN_ONLINE_E2E_ENDPOINT }}
+      FLOWDOWN_ONLINE_E2E_ENDPOINT_RESPONSES: ${{ secrets.FLOWDOWN_ONLINE_E2E_ENDPOINT_RESPONSES }}
+      FLOWDOWN_ONLINE_E2E_ENABLE_RESPONSES: ${{ vars.FLOWDOWN_ONLINE_E2E_ENABLE_RESPONSES }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check Secrets
+        run: |
+          if [ -z "$FLOWDOWN_ONLINE_E2E_TOKEN" ] || [ -z "$FLOWDOWN_ONLINE_E2E_ENDPOINT" ]; then
+            echo "::notice::FLOWDOWN_ONLINE_E2E_TOKEN or FLOWDOWN_ONLINE_E2E_ENDPOINT not available, skipping online E2E tests"
+            echo "SKIP_E2E=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Checkout
+        if: env.SKIP_E2E != 'true'
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Newest Xcode
+        if: env.SKIP_E2E != 'true'
+        run: |
+          chmod +x Resources/DevKit/scripts/select_newest_xcode.sh
+          ./Resources/DevKit/scripts/select_newest_xcode.sh
+
+      - name: Run Online E2E
+        if: env.SKIP_E2E != 'true'
+        run: make test-online-e2e
+
+      - name: Upload Test Results
+        if: always() && env.SKIP_E2E != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-e2e-results
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/*/Logs/Test/*.xcresult
+          if-no-files-found: warn
+          retention-days: 7

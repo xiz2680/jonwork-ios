@@ -1,0 +1,15 @@
+//
+//  Development.xcconfig
+//  FlowDown
+//
+//  Created by qaq on 2025/12/11.
+//
+
+#include "Base.xcconfig"
+
+CLOUDKIT_CONTAINER_ENVIRONMENT = Development;
+APS_ENVIRONMENT = development;
+
+#include? "Developer.xcconfig"
+#include? "DevelopmentDeveloper.xcconfig"
+

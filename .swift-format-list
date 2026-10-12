@@ -1,0 +1,13 @@
+# Include-only list for SwiftFormat.
+# One path per line, relative to repo root. Blank lines and comments are ignored.
+
+Examples
+FlowDown
+FlowDownTranslationProvider
+FlowDownUnitTests
+FlowDownWidgets
+
+Frameworks/ChatClientKit
+Frameworks/FlowDownModelExchange
+Frameworks/Logger
+Frameworks/Storage

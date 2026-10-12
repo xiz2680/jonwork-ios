@@ -1,0 +1,43 @@
+name: "🔧 Improvement / Chore"
+description: "Track minor fixes, refactors, docs, or performance improvements"
+title: "[Improve] Short summary"
+labels:
+  - chore
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For improvements that are neither bugs nor new features.
+  - type: input
+    id: summary
+    attributes:
+      label: Improvement scope
+      description: One sentence on what needs to be done.
+      placeholder: e.g. Improve chat list scroll performance
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and motivation
+      description: Current issue, optimization goal, or affected module.
+    validations:
+      required: true
+  - type: textarea
+    id: plan
+    attributes:
+      label: Proposed plan / tasks
+      description: List subtasks, risks, or resources needed.
+  - type: input
+    id: appVersion
+    attributes:
+      label: Related version
+      description: "Open FlowDown → Settings → scroll to bottom → copy “Version 1.2.3 (123)”."
+      placeholder: e.g. 1.2.3 (123) or next minor
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional notes
+      description: References, metrics, or acceptance criteria.

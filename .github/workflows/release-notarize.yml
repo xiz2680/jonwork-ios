@@ -1,0 +1,109 @@
+name: Notarize Release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  notarize:
+    name: Notarize macOS build
+    runs-on: macos-26
+    env:
+      VERSION: ${{ github.ref_name }}
+      XCODE_VERSION: "26.3"
+    steps:
+      - name: Validate ref
+        id: tag_check
+        run: |
+          set -euo pipefail
+          if [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "mode=tag" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+          echo "Tag ${VERSION} does not match x.x.x (no v/beta/rev); skipping notarization." >> "$GITHUB_STEP_SUMMARY"
+      - name: Checkout
+        if: steps.tag_check.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          submodules: recursive
+      - name: Setup notary keychain and signing env
+        if: steps.tag_check.outputs.ok == 'true'
+        id: setup_notary
+        env:
+          NOTARY_TOOLBOX_ZIP_BASE64: ${{ secrets.NOTARY_TOOLBOX_ZIP_BASE64 }}
+          NOTARY_TOOLBOX_PASSWORD: ${{ secrets.NOTARY_TOOLBOX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./Resources/DevKit/scripts/notary-setup-keychain.sh "$GITHUB_OUTPUT" "$GITHUB_ENV"
+      - name: Install notarize provisioning profile
+        if: steps.tag_check.outputs.ok == 'true'
+        env:
+          NOTARY_TOOLBOX_PROVISION_PROFILE_BASE64: ${{ secrets.NOTARY_TOOLBOX_PROVISION_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          ./Resources/DevKit/scripts/install-notary-profile.sh "$GITHUB_ENV"
+      - name: Run notarization action
+        if: steps.tag_check.outputs.ok == 'true'
+        id: notarize_action
+        env:
+          CODE_SIGNING_IDENTITY: ${{ steps.setup_notary.outputs.code_signing_identity }}
+          CODE_SIGNING_TEAM: ${{ steps.setup_notary.outputs.code_signing_team }}
+          KEYCHAIN_DB: ${{ steps.setup_notary.outputs.keychain_db }}
+          NOTARIZE_KEYCHAIN_PROFILE: ${{ steps.setup_notary.outputs.notarize_keychain_profile }}
+          PROVISIONING_PROFILE_SPECIFIER: ${{ env.PROVISIONING_PROFILE_SPECIFIER }}
+          ENABLE_NOTARIZE: "1"
+          VERSION: ${{ env.VERSION }}
+          NOTARIZE_ZIP_OUTPUT: ${{ format('{0}/BuildArtifacts/FlowDown-{1}.zip', github.workspace, env.VERSION) }}
+        run: |
+          set -euo pipefail
+          ./Resources/DevKit/scripts/notary-action.sh "$GITHUB_OUTPUT"
+      - name: Upload build outputs
+        if: steps.tag_check.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowDown-${{ env.VERSION }}-build-pre-notarize
+          path: |
+            BuildArtifacts/FlowDown-macos.xcarchive
+            BuildArtifacts/macos-notary.xcresult
+          if-no-files-found: error
+          retention-days: 7
+      - name: Create release (replace if exists)
+        if: steps.tag_check.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            echo "Release ${VERSION} already exists; deleting to replace"
+            gh release delete "${VERSION}" --yes
+          fi
+          gh release create "${VERSION}" --title "${VERSION}" --notes "Automated release for ${VERSION}"
+      - name: Upload notarized ZIP to release
+        if: steps.tag_check.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ env.VERSION }}
+          ZIP_PATH: ${{ steps.notarize_action.outputs.zip_path }}
+        run: |
+          set -euo pipefail
+          if [[ ! -f "$ZIP_PATH" ]]; then
+            echo "ZIP not found at $ZIP_PATH" >&2
+            exit 1
+          fi
+          gh release upload "${VERSION}" "$ZIP_PATH#FlowDown-${VERSION}.zip" --clobber
+      - name: Upload notarized ZIP as artifact
+        if: steps.tag_check.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowDown-${{ env.VERSION }}-notarized-zip
+          path: ${{ steps.notarize_action.outputs.zip_path }}
+          if-no-files-found: error
+          retention-days: 7

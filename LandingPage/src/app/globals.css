@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+@theme {
+  /* Color palette matching Figma design */
+  --color-bg: #f6f6f6;
+  --color-text-primary: #242424;
+  --color-text-secondary: #828282;
+  --color-text-muted: #9d9d9d;
+  --color-text-link: #454545;
+  --color-border: #e6e6e6;
+  --color-card-bg: #ebebeb;
+  --color-white: #ffffff;
+
+  /* Typography - using next/font CSS variables */
+  --font-serif: var(--font-instrument-serif), Georgia, serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+
+  /* Spacing */
+  --spacing-xs: 8px;
+  --spacing-s: 24px;
+  --spacing-sm: 32px;
+  --spacing-m: 48px;
+}
+
+/* Base styles */
+html {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Selection */
+::selection {
+  background: var(--color-text-primary);
+  color: var(--color-white);
+}
+
+/* Focus styles */
+:focus-visible {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 2px;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #dcdcdc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b0b0b0;
+}
+
+/* Glass effect for feature icons */
+.glass-icon {
+  background: rgba(255, 255, 255, 0.69);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Gradient button */
+.btn-primary {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.8) 100%),
+    linear-gradient(90deg, #242424 0%, #242424 100%);
+}
+
+/* Feature card gradient */
+.feature-card-bg {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.2) 0%,
+      rgba(255, 255, 255, 0.2) 100%
+    ),
+    linear-gradient(90deg, #ebebeb 0%, #ebebeb 100%);
+}
+
+/* Star rating */
+.star-rating {
+  display: flex;
+  gap: 2px;
+}
+
+.star-rating svg {
+  width: 20px;
+  height: 20px;
+  fill: #ffc107;
+}
+
+/* Line divider animation */
+@keyframes line-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* FAQ accordion transition */
+.faq-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+}
+
+.faq-content.open {
+  max-height: 1000px;
+}

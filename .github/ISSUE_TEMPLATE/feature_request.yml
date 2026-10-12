@@ -1,0 +1,69 @@
+name: "✨ Feature Request"
+description: "Propose new capabilities, UX improvements, or model-related needs"
+title: "[Feature] Short summary"
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the ideas! Please describe the scenario and expected value.
+  - type: input
+    id: summary
+    attributes:
+      label: Feature overview
+      description: One sentence to summarize the request.
+      placeholder: e.g. Export conversations as Markdown
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve / goal
+      description: Current limitation or desired outcome.
+      placeholder: |
+        e.g. Cannot batch export, making team sharing difficult.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe desired behavior, entry points, or settings.
+      placeholder: |
+        e.g. Add an “Export” button in conversation list for PDF/Markdown.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Note any workarounds you tried.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Primary platform
+      options:
+        - iPhone or iPad
+        - Mac (Catalyst build)
+        - Cross-platform (both)
+    validations:
+      required: true
+  - type: input
+    id: appVersion
+    attributes:
+      label: Current app version/build
+      description: "Open FlowDown → Settings → scroll to bottom → copy “Version 1.2.3 (123)”."
+      placeholder: e.g. 1.2.3 (123)
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Value and impact
+      description: Who benefits and how to measure success (optional).
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Links to designs, prototypes, or references.

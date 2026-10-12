@@ -1,0 +1,137 @@
+{
+  "id": "A1B2C3D4-E5F6-4789-8012-1234567890AB",
+  "title": {
+    "key": "Primary School Chinese Evaluation",
+    "arguments": []
+  },
+  "description": {
+    "key": "Tests basic Chinese language capabilities.",
+    "arguments": []
+  },
+  "suites": [
+    {
+      "id": "B2C3D4E5-F6A7-4890-9123-0987654321CD",
+      "title": {
+        "key": "Chinese Language Basics",
+        "arguments": []
+      },
+      "description": {
+        "key": "Five basic questions covering poetry and idioms.",
+        "arguments": []
+      },
+      "cases": [
+        {
+          "id": "C3D4E5F6-A7B8-4901-A234-111111111111",
+          "title": "Ancient Poetry Completion",
+          "results": [],
+          "content": [
+            {
+              "type": "instruct",
+              "textRepresentation": "你正在参加小学语文考试。请根据题目要求准确作答。严禁输出多余的标点符号或解释性文字。"
+            },
+            {
+              "type": "request",
+              "textRepresentation": "请补全古诗：'白日依山尽'的下一句是什么？只输出那五个字。"
+            }
+          ],
+          "verifier": [
+            {
+              "match": {
+                "pattern": "黄河入海流"
+              }
+            }
+          ]
+        },
+        {
+          "id": "D4E5F6A7-B8C9-4012-B345-222222222222",
+          "title": "Author Identification",
+          "results": [],
+          "content": [
+            {
+              "type": "instruct",
+              "textRepresentation": "你正在参加小学语文考试。必须精准回答名字，不要加书名号或尊称。"
+            },
+            {
+              "type": "request",
+              "textRepresentation": "古诗《静夜思》的作者是谁？"
+            }
+          ],
+          "verifier": [
+            {
+              "match": {
+                "pattern": "李白"
+              }
+            }
+          ]
+        },
+        {
+          "id": "E5F6A7B8-C9D0-4123-C456-333333333333",
+          "title": "Idiom Guessing",
+          "results": [],
+          "content": [
+            {
+              "type": "instruct",
+              "textRepresentation": "你是一个成语词典助手。请直接输出成语，不要带标点。"
+            },
+            {
+              "type": "request",
+              "textRepresentation": "根据意思猜成语：比喻画画时给蛇添上了脚。比喻多此一举，不但无益，反而有害。"
+            }
+          ],
+          "verifier": [
+            {
+              "match": {
+                "pattern": "画蛇添足"
+              }
+            }
+          ]
+        },
+        {
+          "id": "F6A7B8C9-D0E1-4234-D567-444444444444",
+          "title": "Tone Identification",
+          "results": [],
+          "content": [
+            {
+              "type": "instruct",
+              "textRepresentation": "你只负责识别汉字的声调。请只回复数字 1, 2, 3, 或 4。"
+            },
+            {
+              "type": "request",
+              "textRepresentation": "“我们”的“我”字是第几声？"
+            }
+          ],
+          "verifier": [
+            {
+              "match": {
+                "pattern": "3"
+              }
+            }
+          ]
+        },
+        {
+          "id": "A7B8C9D0-E1F2-4345-E678-555555555555",
+          "title": "Synonym Selection",
+          "results": [],
+          "content": [
+            {
+              "type": "instruct",
+              "textRepresentation": "这是一道选择题。请从选项中选出正确答案，只回答选项字母（A 或 B）。"
+            },
+            {
+              "type": "request",
+              "textRepresentation": "下列词语中，与“开心”意思最相近的是哪一个？\nA. 难过\nB. 快乐"
+            }
+          ],
+          "verifier": [
+            {
+              "matchCaseInsensitive": {
+                "pattern": "B"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,93 @@
+name: Build
+
+on:
+  pull_request:
+    paths:
+      - "FlowDown/**"
+      - "Frameworks/**"
+      - "FlowDownUnitTests/**"
+      - "Resources/**"
+      - "FlowDown.xcodeproj/**"
+      - "FlowDown.xcworkspace/**"
+      - ".github/workflows/ci.yml"
+      - "Makefile"
+      - "Package.resolved"
+
+jobs:
+  build:
+    if: ${{ !startsWith(github.head_ref, 'housekeeping/') }}
+    name: Build (${{ matrix.target }})
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ios
+            scheme: FlowDown
+            destination: "generic/platform=iOS"
+            archive_path: BuildArtifacts/ios.xcarchive
+          - target: macos
+            scheme: FlowDown
+            destination: "generic/platform=macOS,variant=Mac Catalyst"
+            archive_path: BuildArtifacts/macos.xcarchive
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Newest Xcode
+        run: |
+          chmod +x Resources/DevKit/scripts/select_newest_xcode.sh
+          ./Resources/DevKit/scripts/select_newest_xcode.sh
+
+      - name: Resolve Packages (${{ matrix.target }})
+        run: |
+          set -o pipefail
+          xcodebuild -downloadComponent MetalToolchain
+          xcodebuild \
+            -workspace FlowDown.xcworkspace \
+            -scheme "${{ matrix.scheme }}" \
+            -resolvePackageDependencies \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | xcbeautify --is-ci --disable-colored-output --disable-logging
+
+      - name: Archive (${{ matrix.target }})
+        run: |
+          set -o pipefail
+          xcodebuild -downloadComponent MetalToolchain
+          mkdir -p BuildArtifacts
+          xcodebuild \
+            -workspace FlowDown.xcworkspace \
+            -scheme "${{ matrix.scheme }}" \
+            -configuration Release \
+            -destination '${{ matrix.destination }}' \
+            archive \
+            -archivePath "${{ matrix.archive_path }}" \
+            -resultBundlePath "BuildArtifacts/${{ matrix.target }}.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | xcbeautify --is-ci --disable-colored-output --disable-logging
+
+      - name: Compress Archive (${{ matrix.target }})
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent "${{ matrix.archive_path }}" "BuildArtifacts/${{ matrix.target }}.xcarchive.zip"
+
+      - name: Upload Build Artifact (${{ matrix.target }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-xcresult
+          path: BuildArtifacts/${{ matrix.target }}.xcresult
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Archive Artifact (${{ matrix.target }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-xcarchive
+          path: BuildArtifacts/${{ matrix.target }}.xcarchive.zip
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,99 @@
+name: "🐛 Bug Report"
+description: "Report crashes, regressions, or incorrect behavior in FlowDown"
+title: "[Bug] Short summary"
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report!
+
+        How to find app version/build:
+        1) Open FlowDown
+        2) Tap the gear icon (Settings)
+        3) Scroll to the bottom and copy the line that looks like “Version 1.2.3 (123)”
+
+        How to send logs (if possible):
+        1) In Settings, tap “Contact Us” → “View Logs”
+        2) On the log screen, tap the button with three dots in a circle (top right)
+        3) Tap “Share” and choose Files/Notes/AirDrop, then attach here
+        4) If you can’t share, a screenshot is also okay
+  - type: input
+    id: summary
+    attributes:
+      label: Issue summary
+      description: One sentence that captures the core problem.
+      placeholder: e.g. App shows white screen after launch
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Step-by-step actions; if intermittent, note frequency.
+      placeholder: |
+        1. Open ...
+        2. Tap ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What you expected to happen
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: What actually happened
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - iPhone or iPad
+        - Mac (Catalyst build)
+    validations:
+      required: true
+  - type: input
+    id: osVersion
+    attributes:
+      label: OS version
+      placeholder: e.g. iOS 18.1 / macOS 15.1
+    validations:
+      required: true
+  - type: input
+    id: appVersion
+    attributes:
+      label: App version/build
+      description: "Open Settings → scroll to bottom → copy “Version 1.2.3 (123)”."
+      placeholder: e.g. 1.2.3 (123)
+    validations:
+      required: true
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Did this work before?
+      options:
+        - Not sure
+        - Yes, it worked before
+        - No, it never worked
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs/crash info
+      description: Paste the shared log text (see steps above). If you cannot share logs, attach a screenshot.
+      render: shell
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or screen recording
+      description: Optional but helpful.
