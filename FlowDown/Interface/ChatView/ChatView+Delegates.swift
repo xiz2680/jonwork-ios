@@ -22,6 +22,11 @@ extension ChatView: RichEditorView.Delegate {
       return
     }
 
+    if PiSessionCoordinator.shared.binding(for: conversationID) != nil {
+      submitToPi(object: object, conversationID: conversationID, completion: completion)
+      return
+    }
+
     guard let modelID = modelIdentifier(), !modelID.isEmpty else {
       if ModelManager.shared.localModels.value.isEmpty,
         ModelManager.shared.cloudModels.value.isEmpty
@@ -130,6 +135,100 @@ extension ChatView: RichEditorView.Delegate {
         self.editor.focus()
       }
     #endif
+  }
+
+  private func submitToPi(
+    object: RichEditorView.Object,
+    conversationID: Conversation.ID,
+    completion: @escaping (Bool) -> Void
+  ) {
+    guard object.attachments.isEmpty else {
+      Indicator.present(
+        title: "This Pi server does not support attachments yet.",
+        preset: .error,
+        referencingView: self
+      )
+      completion(false)
+      return
+    }
+
+    guard let viewState = PiSessionCoordinator.shared.viewState(for: conversationID) else {
+      Indicator.present(
+        title: "Pi is reconnecting. Try again in a moment.",
+        preset: .error,
+        referencingView: self
+      )
+      completion(false)
+      return
+    }
+
+    if viewState.conversation.isStreaming {
+      let chooser = UIAlertController(
+        title: String(localized: "Send while Pi is working"),
+        message: String(localized: "Choose whether to steer the current response or queue a follow-up."),
+        preferredStyle: .actionSheet
+      )
+      chooser.addAction(UIAlertAction(title: String(localized: "Steer Current Response"), style: .default) { [weak self] _ in
+        self?.performPiSend(
+          text: object.text,
+          delivery: .steer,
+          conversationID: conversationID,
+          completion: completion
+        )
+      })
+      chooser.addAction(UIAlertAction(title: String(localized: "Queue Follow-up"), style: .default) { [weak self] _ in
+        self?.performPiSend(
+          text: object.text,
+          delivery: .followUp,
+          conversationID: conversationID,
+          completion: completion
+        )
+      })
+      chooser.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel) { _ in
+        completion(false)
+      })
+      chooser.popoverPresentationController?.sourceView = self
+      chooser.popoverPresentationController?.sourceRect = CGRect(
+        x: bounds.midX,
+        y: bounds.maxY - editor.bounds.height,
+        width: 1,
+        height: 1
+      )
+      parentViewController?.present(chooser, animated: true)
+    } else {
+      performPiSend(
+        text: object.text,
+        delivery: nil,
+        conversationID: conversationID,
+        completion: completion
+      )
+    }
+  }
+
+  private func performPiSend(
+    text: String,
+    delivery: PiCommand.Delivery?,
+    conversationID: Conversation.ID,
+    completion: @escaping (Bool) -> Void
+  ) {
+    Task { @MainActor [weak self] in
+      do {
+        try await PiSessionCoordinator.shared.send(
+          text: text,
+          delivery: delivery,
+          conversationID: conversationID
+        )
+        completion(true)
+      } catch {
+        guard let self else {
+          completion(false)
+          return
+        }
+        let errorKey: String.LocalizationValue = "\(error.localizedDescription)"
+        Indicator.present(title: errorKey, preset: .error, referencingView: self)
+        completion(false)
+      }
+    }
   }
 
   func onRichEditorError(_ error: String) {

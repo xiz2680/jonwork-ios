@@ -100,6 +100,7 @@ import UIKit
 
 extension SettingController {
     enum EntryPage {
+        case piServer
         case general
         case inference
         case chatTemplateEditor(templateIdentifier: ChatTemplate.ID)

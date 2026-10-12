@@ -20,6 +20,7 @@ final class ConversationSession: Identifiable {
     private(set) var messages: [Message] = []
     private(set) var attachments: [Message.ID: [Attachment]] = [:]
     private var thinkingDurationTimer: [Message.ID: Timer] = [:]
+    private var transientMessageIDs: Set<Message.ID> = []
 
     private lazy var messagesSubject: CurrentValueSubject<
         ([Message], Bool),
@@ -106,6 +107,29 @@ final class ConversationSession: Identifiable {
         return message
     }
 
+    @discardableResult
+    func appendTransientMessage(role: Message.Role, _ block: Storage.MessageMakeInitDataBlock? = nil) -> Message {
+        let message = sdb.makeMessage(with: id, skipSave: true) {
+            block?($0)
+            $0.update(\.role, to: role)
+        }
+        messages.append(message)
+        transientMessageIDs.insert(message.objectId)
+        return message
+    }
+
+    func isTransientMessage(_ messageIdentifier: Message.ID) -> Bool {
+        transientMessageIDs.contains(messageIdentifier)
+    }
+
+    func discardTransientMessage(messageIdentifier: Message.ID) {
+        messages.removeAll { $0.objectId == messageIdentifier }
+        transientMessageIDs.remove(messageIdentifier)
+        attachments[messageIdentifier] = nil
+        thinkingDurationTimer[messageIdentifier]?.invalidate()
+        thinkingDurationTimer[messageIdentifier] = nil
+    }
+
     private func updateAttachment(_ attachment: Attachment, using object: RichEditorView.Object.Attachment) {
 //        attachment.objectId = object.id.uuidString
 //        attachment.type = object.type.rawValue
@@ -163,9 +187,10 @@ final class ConversationSession: Identifiable {
     func refreshContentsFromDatabase() {
         // Load historical messages from the database.
         assert(Thread.isMainThread, "refreshContentsFromDatabase must be called on main thread for UI coherence")
-        messages.removeAll()
+        let transientMessages = messages.filter { transientMessageIDs.contains($0.objectId) }
         attachments.removeAll()
         messages = sdb.listMessages(within: id)
+        messages.append(contentsOf: transientMessages)
         linkedContents.removeAll()
         for message in messages {
             let id = message.objectId
@@ -183,9 +208,8 @@ final class ConversationSession: Identifiable {
         notifyMessagesDidChange()
     }
 
-    @inlinable
     func save() {
-        sdb.messagePut(messages: messages)
+        sdb.messagePut(messages: messages.filter { !transientMessageIDs.contains($0.objectId) })
     }
 
     @inlinable
@@ -200,6 +224,11 @@ final class ConversationSession: Identifiable {
 
     /// 删除这条消息
     func delete(messageIdentifier: Message.ID) {
+        if isTransientMessage(messageIdentifier) {
+            discardTransientMessage(messageIdentifier: messageIdentifier)
+            notifyMessagesDidChange()
+            return
+        }
         cancelCurrentTask { [self] in
             sdb.deleteSupplementMessage(nextTo: messageIdentifier)
             sdb.delete(messageIdentifier: messageIdentifier)
@@ -208,6 +237,10 @@ final class ConversationSession: Identifiable {
     }
 
     func discard(messageIdentifier: Message.ID) {
+        if isTransientMessage(messageIdentifier) {
+            discardTransientMessage(messageIdentifier: messageIdentifier)
+            return
+        }
         sdb.deleteSupplementMessage(nextTo: messageIdentifier)
         sdb.delete(messageIdentifier: messageIdentifier)
         messages.removeAll { $0.objectId == messageIdentifier }
@@ -242,6 +275,10 @@ final class ConversationSession: Identifiable {
             if message.document.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 message.update(\.document, to: String(localized: "Empty message."))
             }
+            if isTransientMessage(messageIdentifier) {
+                notifyMessagesDidChange()
+                return
+            }
             sdb.messagePut(messages: [message])
             notifyMessagesDidChange()
         }
@@ -252,6 +289,10 @@ final class ConversationSession: Identifiable {
             return
         }
         message.update(\.reasoningContent, to: reasoningContent)
+        if isTransientMessage(messageIdentifier) {
+            notifyMessagesDidChange()
+            return
+        }
         sdb.messagePut(messages: [message])
         notifyMessagesDidChange()
     }

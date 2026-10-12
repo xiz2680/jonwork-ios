@@ -410,9 +410,11 @@ extension ConversationManager {
                         image: UIImage(systemName: "trash"),
                         attributes: .destructive,
                     ) { _ in
-                        ConversationManager.shared.deleteConversation(identifier: conv.id)
-                        if let first = ConversationManager.shared.conversations.value.values.first?.id {
-                            ChatSelection.shared.select(first)
+                        Task { @MainActor in
+                            ConversationManager.shared.deleteConversation(identifier: conv.id)
+                            if let first = ConversationManager.shared.conversations.value.values.first?.id {
+                                ChatSelection.shared.select(first)
+                            }
                         }
                     }
                 } else {
@@ -438,9 +440,11 @@ extension ConversationManager {
                                 image: UIImage(systemName: "trash"),
                                 attributes: .destructive,
                             ) { _ in
-                                ConversationManager.shared.deleteConversation(identifier: conv.id)
-                                if let first = ConversationManager.shared.conversations.value.values.first?.id {
-                                    ChatSelection.shared.select(first)
+                                Task { @MainActor in
+                                    ConversationManager.shared.deleteConversation(identifier: conv.id)
+                                    if let first = ConversationManager.shared.conversations.value.values.first?.id {
+                                        ChatSelection.shared.select(first)
+                                    }
                                 }
                             },
                         ].compactMap(\.self),

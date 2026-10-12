@@ -92,7 +92,7 @@ New chat timelines, Markdown renderers, composers, attachment pickers, tool card
 ## Git and Change Control
 
 - Product branches use `codex/<linear-id>-<short-name>` unless Linear supplies an approved branch.
-- Preserve upstream FlowDown history and keep upstream sync separate from Pi feature commits.
+- This repository starts with a clean Jonwork-owned root commit and does not import FlowDown Git history. Record the source FlowDown release and license provenance in documentation; evaluate future source updates as explicit, reviewable vendor changes.
 - Keep commits focused and reference the Linear identifier.
 - Do not commit secrets, signing assets, derived data, screenshots, or user session data.
 - Every pull request contains summary, Linear link, risk, test evidence, screenshots for UI changes, migration notes, and rollback steps.

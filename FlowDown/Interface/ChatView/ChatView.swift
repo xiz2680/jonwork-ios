@@ -66,6 +66,7 @@ class ChatView: UIView {
     var editorApplyModelToDefault: Bool
 
     let title = TitleBar()
+    let piStatusView = PiSessionStatusView()
 
     var onCreateNewChat: (() -> Void)?
     var onSuggestNewChat: ((Conversation.ID) -> Void)?
@@ -82,10 +83,18 @@ class ChatView: UIView {
         #endif
 
         addSubview(title)
+        addSubview(piStatusView)
 
         #if !targetEnvironment(macCatalyst)
             bringSubviewToFront(escapeButtonGlass)
         #endif
+
+        piStatusView.snp.makeConstraints { make in
+            make.top.equalTo(title.snp.bottom).offset(8)
+            make.centerX.equalToSuperview()
+            make.width.lessThanOrEqualToSuperview().inset(64)
+            make.height.greaterThanOrEqualTo(44)
+        }
 
         editor.handlerColor = handlerColor
         editor.delegate = self
@@ -197,6 +206,17 @@ class ChatView: UIView {
                 editor.submitValues()
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .piSessionDidChange)
+            .ensureMainThread()
+            .sink { [weak self] notification in
+                guard let self,
+                      let conversationID = notification.object as? Conversation.ID,
+                      conversationID == conversationIdentifier
+                else { return }
+                updatePiPresentation()
+            }
+            .store(in: &cancellables)
     }
 
     @available(*, unavailable)
@@ -250,6 +270,8 @@ class ChatView: UIView {
 
         editor.use(identifier: conversation)
         title.use(identifier: conversation)
+        PiSessionCoordinator.shared.activate(conversationID: conversation)
+        updatePiPresentation()
 
         let isExecuting = sessionManager.isSessionExecuting(conversation)
         editor.setProcessingMode(isExecuting)
@@ -271,8 +293,9 @@ class ChatView: UIView {
         guard let currentMessageListView else { return }
         let visibleEditorTop = min(editor.frame.minY, editorBackgroundView.frame.minY)
 
+        let headerBottom = piStatusView.isHidden ? title.frame.maxY : piStatusView.frame.maxY
         currentMessageListView.contentSafeAreaInsets = .init(
-            top: title.frame.maxY + 16,
+            top: headerBottom + 16,
             left: 0,
             bottom: bounds.height - visibleEditorTop + 16,
             right: 0,
@@ -283,6 +306,109 @@ class ChatView: UIView {
             bottom: bounds.height - visibleEditorTop,
             right: 0,
         )
+    }
+
+    private func updatePiPresentation() {
+        guard let conversationIdentifier,
+              PiSessionCoordinator.shared.binding(for: conversationIdentifier) != nil
+        else {
+            piStatusView.isHidden = true
+            editor.isUserInteractionEnabled = true
+            setNeedsLayout()
+            return
+        }
+
+        if let viewState = PiSessionCoordinator.shared.viewState(for: conversationIdentifier) {
+            piStatusView.update(viewState)
+            let state = viewState.conversation
+            editor.isUserInteractionEnabled = viewState.connection == .connected
+                && state.role == .controller
+                && !state.isReleased
+            piStatusView.actionButton.menu = buildPiSessionMenu(viewState: viewState)
+        } else {
+            piStatusView.showConnecting()
+            editor.isUserInteractionEnabled = false
+            piStatusView.actionButton.menu = nil
+        }
+        setNeedsLayout()
+    }
+
+    private func buildPiSessionMenu(viewState: PiSessionCoordinator.ViewState) -> UIMenu {
+        guard let conversationIdentifier else { return UIMenu() }
+        if viewState.connection != .connected {
+            return UIMenu(title: String(localized: "Pi Session"), children: [
+                UIAction(
+                    title: String(localized: "Retry"),
+                    image: UIImage(systemName: "arrow.clockwise")
+                ) { _ in
+                    Task { @MainActor in
+                        PiSessionCoordinator.shared.reconnect(conversationID: conversationIdentifier)
+                    }
+                },
+            ])
+        }
+        let state = viewState.conversation
+        var actions: [UIMenuElement] = []
+        if state.role == .controller, state.isStreaming {
+            actions.append(UIAction(
+                title: String(localized: "Stop Response"),
+                image: UIImage(systemName: "stop.circle")
+            ) { [weak self] _ in
+                Task { await self?.performPiAction { try await PiSessionCoordinator.shared.abort(conversationID: conversationIdentifier) } }
+            })
+        }
+        if state.role == .viewer, !state.isStreaming {
+            actions.append(UIAction(
+                title: String(localized: "Take Control"),
+                image: UIImage(systemName: "hand.raised")
+            ) { [weak self] _ in
+                Task { await self?.performPiAction { try await PiSessionCoordinator.shared.takeOver(conversationID: conversationIdentifier) } }
+            })
+        } else if state.role == .viewer, state.isStreaming {
+            actions.append(UIAction(
+                title: String(localized: "Take Control is unavailable while Pi is working."),
+                image: UIImage(systemName: "hand.raised"),
+                attributes: .disabled
+            ) { _ in })
+        }
+        if state.role == .controller, !state.isReleased {
+            actions.append(UIAction(
+                title: String(localized: "Release to Pi CLI"),
+                image: UIImage(systemName: "terminal"),
+                attributes: .destructive
+            ) { [weak self] _ in
+                self?.confirmPiRelease(conversationID: conversationIdentifier)
+            })
+        }
+        if actions.isEmpty {
+            actions.append(UIAction(
+                title: String(localized: "No actions available"),
+                attributes: .disabled
+            ) { _ in })
+        }
+        return UIMenu(title: String(localized: "Pi Session"), children: actions)
+    }
+
+    private func confirmPiRelease(conversationID: Conversation.ID) {
+        let alert = UIAlertController(
+            title: String(localized: "Release to Pi CLI?"),
+            message: String(localized: "The mobile runtime will close. Your durable session stays available in the Pi CLI."),
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Release"), style: .destructive) { [weak self] _ in
+            Task { await self?.performPiAction { try await PiSessionCoordinator.shared.release(conversationID: conversationID) } }
+        })
+        parentViewController?.present(alert, animated: true)
+    }
+
+    private func performPiAction(_ action: @escaping @MainActor () async throws -> Void) async {
+        do {
+            try await action()
+        } catch {
+            let errorKey: String.LocalizationValue = "\(error.localizedDescription)"
+            Indicator.present(title: errorKey, preset: .error, referencingView: self)
+        }
     }
 
     private func removeUnusedListViews() {

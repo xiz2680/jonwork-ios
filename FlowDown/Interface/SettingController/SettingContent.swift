@@ -18,6 +18,12 @@ extension SettingController {
 
         nonisolated(unsafe) let objects: [ConfigurableObject] = [
             .init(
+                icon: "network",
+                title: "Pi Server",
+                explain: "Connect to Pi, choose a repository, and resume agent sessions.",
+                ephemeralAnnotation: .page { PiServerController() },
+            ),
+            .init(
                 icon: "gear",
                 title: "General",
                 explain: "Change the behavior of the application, adjust text sizes, tuning editor behavior.",
@@ -169,6 +175,8 @@ extension SettingController {
 extension SettingController.EntryPage {
     var controller: UIViewController? {
         switch self {
+        case .piServer:
+            return SettingController.SettingContent.PiServerController()
         case .general:
             return SettingController.SettingContent.GeneralController()
         case .inference:

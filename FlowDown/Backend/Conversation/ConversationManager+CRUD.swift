@@ -121,7 +121,9 @@ extension ConversationManager {
         return ans
     }
 
+    @MainActor
     func deleteConversation(identifier: Conversation.ID) {
+        PiSessionCoordinator.shared.unbind(conversationID: identifier)
         let session = ConversationSessionManager.shared.session(for: identifier)
         session.cancelCurrentTask {}
         sdb.conversationRemove(conversationWith: identifier)
@@ -132,13 +134,16 @@ extension ConversationManager {
         ConversationSessionManager.shared.invalidateSession(for: identifier)
     }
 
+    @MainActor
     func eraseAll() {
+        let identifiers = Array(conversations.value.keys)
+        PiSessionCoordinator.shared.unbindAll()
         sdb.conversationsDrop()
         clearRichEditorObject()
         ConversationManager.shouldShowGuideMessage = true
         scanAll()
         // Clear all cached sessions after mass deletion
-        for (identifier, _) in conversations.value {
+        for identifier in identifiers {
             ConversationSessionManager.shared.invalidateSession(for: identifier)
         }
     }
