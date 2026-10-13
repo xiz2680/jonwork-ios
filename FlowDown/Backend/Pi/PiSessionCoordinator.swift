@@ -90,6 +90,7 @@ final class PiSessionCoordinator {
     private let pendingMutationStore: any PiPendingMutationStoring
     private var pendingMutationStoreLoadFailed = false
     private var pendingMutations: [Conversation.ID: PiPendingMutationRecord] = [:]
+    private var pendingAttachmentBatches: [Conversation.ID: PiPendingAttachmentBatch] = [:]
     private var lastMutationReceipts: [Conversation.ID: PiGatewayWire.MutationReceipt] = [:]
     private var phases: [Conversation.ID: ConnectionPhase] = [:]
     private var services: [Conversation.ID: any PiServiceProtocol] = [:]
@@ -100,6 +101,8 @@ final class PiSessionCoordinator {
     private var projectedMessages: [Conversation.ID: [String: PiPresentationMessage]] = [:]
     private var migratedConversations: Set<Conversation.ID> = []
     private var activeConversationID: Conversation.ID?
+    private var authenticatedServiceBaseURL: URL?
+    private var authenticatedServiceFactory: (() throws -> any PiServiceProtocol)?
 
     init(
         defaults: UserDefaults = .standard,
@@ -124,9 +127,11 @@ final class PiSessionCoordinator {
         bindings = Self.decodeBindings(defaults.data(forKey: bindingsKey))
         do {
             pendingMutations = try pendingMutationStore.load()
+            pendingAttachmentBatches = try pendingMutationStore.loadAttachmentUploads()
         } catch {
             pendingMutationStoreLoadFailed = true
             pendingMutations = [:]
+            pendingAttachmentBatches = [:]
         }
     }
 
@@ -223,10 +228,27 @@ final class PiSessionCoordinator {
 
     func revokeAllCredentialsAndState() async {
         let activeServices = Array(services.values)
+        authenticatedServiceBaseURL = nil
+        authenticatedServiceFactory = nil
         unbindAll()
+        pendingAttachmentBatches.removeAll()
+        try? pendingMutationStore.saveAttachmentUploads([:])
         for service in activeServices {
             await service.cancelAllRequests()
         }
+    }
+
+    func installAuthenticatedServiceFactory(
+        baseURL: URL,
+        factory: @escaping () throws -> any PiServiceProtocol
+    ) {
+        authenticatedServiceBaseURL = baseURL
+        authenticatedServiceFactory = factory
+    }
+
+    func clearAuthenticatedServiceFactory() {
+        authenticatedServiceBaseURL = nil
+        authenticatedServiceFactory = nil
     }
 
     func activate(conversationID: Conversation.ID?) {
@@ -280,7 +302,14 @@ final class PiSessionCoordinator {
                 do {
                     guard let profile = try profileProvider() else { throw PiServiceError.invalidServerURL }
                     guard profile.baseURL == binding.baseURL else { throw PiCoordinatorError.profileMismatch }
-                    let service = try serviceFactory(profile)
+                    let service: any PiServiceProtocol
+                    if authenticatedServiceBaseURL == profile.baseURL,
+                       let authenticatedServiceFactory
+                    {
+                        service = try authenticatedServiceFactory()
+                    } else {
+                        service = try serviceFactory(profile)
+                    }
                     guard isCurrent(conversationID, binding: binding, generation: generation) else { return }
                     services[conversationID] = service
                     let clientID = binding.clientID
@@ -289,7 +318,9 @@ final class PiSessionCoordinator {
                     let snapshot = try await service.snapshot(sessionID: binding.sessionID)
                     try Task.checkCancellation()
                     guard isCurrent(conversationID, binding: binding, generation: generation) else { return }
-                    var adapter = PiEventAdapter()
+                    var adapter = PiEventAdapter(
+                        replayRetentionEvents: discovery.limits.replayRetentionEvents
+                    )
                     let replacement = try adapter.replace(with: snapshot, clientID: clientID)
                     var reducer = PiSessionReducer()
                     reducer.reduce(replacement)
@@ -365,6 +396,8 @@ final class PiSessionCoordinator {
         guard context.state.isStreaming == (delivery != .prompt) else { throw PiCoordinatorError.sessionStateChanged }
         let attachmentIDs = try await upload(
             attachments,
+            text: text,
+            delivery: delivery,
             conversationID: conversationID,
             context: context
         )
@@ -372,6 +405,9 @@ final class PiSessionCoordinator {
             .send(text: text, attachmentIDs: attachmentIDs, delivery: delivery),
             conversationID: conversationID
         )
+        if pendingAttachmentBatches.removeValue(forKey: conversationID) != nil {
+            try pendingMutationStore.saveAttachmentUploads(pendingAttachmentBatches)
+        }
     }
 
     func send(text: String, delivery: PiCommand.Delivery?, conversationID: Conversation.ID) async throws {
@@ -640,7 +676,12 @@ final class PiSessionCoordinator {
         guard snapshot.sessionId == pending.sessionID,
               snapshot.revision >= receipt.revision
         else { throw PiServiceError.invalidResponse }
-        var adapter = PiEventAdapter()
+        guard let discovery = discoveries[conversationID] else {
+            throw PiServiceError.capabilityUnavailable(["discovery"])
+        }
+        var adapter = PiEventAdapter(
+            replayRetentionEvents: discovery.limits.replayRetentionEvents
+        )
         let replacement = try adapter.replace(with: snapshot, clientID: pending.clientID)
         var reducer = PiSessionReducer()
         reducer.reduce(replacement)
@@ -697,16 +738,24 @@ final class PiSessionCoordinator {
 
     private func upload(
         _ attachments: [PiAttachmentUpload],
+        text: String,
+        delivery: PiConversationAction.Delivery,
         conversationID: Conversation.ID,
         context: (binding: Binding, service: any PiServiceProtocol, clientID: String, state: PiConversationState)
     ) async throws -> [String] {
-        guard !attachments.isEmpty else { return [] }
+        guard !pendingMutationStoreLoadFailed else { throw PiServiceError.invalidResponse }
+        if attachments.isEmpty {
+            guard pendingAttachmentBatches[conversationID] == nil else {
+                throw PiCoordinatorError.mutationInFlight
+            }
+            return []
+        }
         guard let discovery = discoveries[conversationID] else { throw PiCoordinatorError.capabilityUnavailable }
         let sizes = try attachments.map { try $0.byteCount() }
         guard attachments.count <= discovery.limits.attachmentsPerPrompt,
               sizes.reduce(0, +) <= discovery.limits.attachmentTotalBytes
         else { throw PiCoordinatorError.attachmentLimitExceeded }
-        var result: [String] = []
+        var prepared: [(data: Data, record: PiPendingAttachmentUploadRecord)] = []
         for (attachment, size) in zip(attachments, sizes) {
             guard size <= discovery.limits.attachmentMaxBytes,
                   supportsAttachments(conversationID: conversationID, kind: attachment.kind),
@@ -714,17 +763,157 @@ final class PiSessionCoordinator {
                   discovery.limits.attachmentMediaTypes.contains(attachment.mediaType)
             else { throw PiCoordinatorError.capabilityUnavailable }
             let data = try await attachment.load(maximumBytes: discovery.limits.attachmentMaxBytes)
-            let uploaded = try await context.service.uploadAttachment(
-                data: data,
-                fileName: attachment.fileName,
-                mediaType: attachment.mediaType,
-                repositoryID: context.binding.repository,
-                idempotencyKey: UUID().uuidString
-            )
-            guard uploaded.status == .ready else { throw PiServiceError.invalidResponse }
-            result.append(uploaded.attachmentId)
+            let normalizedFileName = attachment.fileName.precomposedStringWithCanonicalMapping
+            guard !normalizedFileName.isEmpty,
+                  normalizedFileName != ".",
+                  normalizedFileName != "..",
+                  !normalizedFileName.contains("\0"),
+                  !normalizedFileName.contains("/"),
+                  !normalizedFileName.contains("\\"),
+                  normalizedFileName.lengthOfBytes(using: .utf8) <= 255
+            else { throw PiServiceError.invalidResponse }
+            let digestBytes = Data(SHA256.hash(data: data))
+            prepared.append((
+                data,
+                .init(
+                    repositoryID: context.binding.repository,
+                    digest: digestBytes.base64EncodedString(),
+                    fileName: normalizedFileName,
+                    mediaType: attachment.mediaType,
+                    byteCount: data.count,
+                    idempotencyKey: UUID().uuidString,
+                    attachmentID: nil,
+                    serverSHA256: nil
+                )
+            ))
         }
-        return result
+        let requestDigest = Self.attachmentRequestDigest(
+            sessionID: context.binding.sessionID,
+            text: text,
+            delivery: delivery,
+            uploads: prepared.map(\.record)
+        )
+        var batch: PiPendingAttachmentBatch
+        if let existing = pendingAttachmentBatches[conversationID] {
+            guard existing.sessionID == context.binding.sessionID,
+                  existing.repositoryID == context.binding.repository,
+                  existing.requestDigest == requestDigest,
+                  existing.expiresAt > Date(),
+                  Self.sameAttachmentInputs(existing.uploads, prepared.map(\.record))
+            else { throw PiCoordinatorError.mutationInFlight }
+            batch = existing
+        } else {
+            batch = .init(
+                sessionID: context.binding.sessionID,
+                repositoryID: context.binding.repository,
+                requestDigest: requestDigest,
+                uploads: prepared.map(\.record),
+                createdAt: Date(),
+                expiresAt: Date().addingTimeInterval(
+                    TimeInterval(discovery.limits.idempotencyRetentionSeconds)
+                )
+            )
+            pendingAttachmentBatches[conversationID] = batch
+            try pendingMutationStore.saveAttachmentUploads(pendingAttachmentBatches)
+        }
+
+        for index in batch.uploads.indices where batch.uploads[index].attachmentID == nil {
+            let pending = batch.uploads[index]
+            let uploaded = try await context.service.uploadAttachment(
+                data: prepared[index].data,
+                fileName: pending.fileName,
+                mediaType: pending.mediaType,
+                repositoryID: pending.repositoryID,
+                idempotencyKey: pending.idempotencyKey
+            )
+            let expectedHexDigest = SHA256.hash(data: prepared[index].data)
+                .map { String(format: "%02x", $0) }
+                .joined()
+            guard uploaded.status == .ready,
+                  uploaded.fileName == pending.fileName,
+                  uploaded.mediaType == pending.mediaType,
+                  uploaded.byteLength == pending.byteCount,
+                  uploaded.sha256 == expectedHexDigest
+            else { throw PiServiceError.invalidResponse }
+            var uploads = batch.uploads
+            uploads[index] = .init(
+                repositoryID: pending.repositoryID,
+                digest: pending.digest,
+                fileName: pending.fileName,
+                mediaType: pending.mediaType,
+                byteCount: pending.byteCount,
+                idempotencyKey: pending.idempotencyKey,
+                attachmentID: uploaded.attachmentId,
+                serverSHA256: uploaded.sha256
+            )
+            batch = .init(
+                sessionID: batch.sessionID,
+                repositoryID: batch.repositoryID,
+                requestDigest: batch.requestDigest,
+                uploads: uploads,
+                createdAt: batch.createdAt,
+                expiresAt: batch.expiresAt
+            )
+            pendingAttachmentBatches[conversationID] = batch
+            try pendingMutationStore.saveAttachmentUploads(pendingAttachmentBatches)
+        }
+        return try batch.uploads.map {
+            guard let attachmentID = $0.attachmentID else { throw PiCoordinatorError.mutationPending }
+            return attachmentID
+        }
+    }
+
+    private static func sameAttachmentInputs(
+        _ stored: [PiPendingAttachmentUploadRecord],
+        _ current: [PiPendingAttachmentUploadRecord]
+    ) -> Bool {
+        guard stored.count == current.count else { return false }
+        return zip(stored, current).allSatisfy {
+            $0.repositoryID == $1.repositoryID
+                && $0.digest == $1.digest
+                && $0.fileName == $1.fileName
+                && $0.mediaType == $1.mediaType
+                && $0.byteCount == $1.byteCount
+        }
+    }
+
+    private static func attachmentRequestDigest(
+        sessionID: String,
+        text: String,
+        delivery: PiConversationAction.Delivery,
+        uploads: [PiPendingAttachmentUploadRecord]
+    ) -> String {
+        struct CanonicalUpload: Encodable {
+            let repositoryID: String
+            let digest: String
+            let fileName: String
+            let mediaType: String
+            let byteCount: Int
+        }
+        struct Canonical: Encodable {
+            let sessionID: String
+            let text: String
+            let delivery: PiConversationAction.Delivery
+            let uploads: [CanonicalUpload]
+        }
+        let canonical = Canonical(
+            sessionID: sessionID,
+            text: text,
+            delivery: delivery,
+            uploads: uploads.map {
+                .init(
+                    repositoryID: $0.repositoryID,
+                    digest: $0.digest,
+                    fileName: $0.fileName,
+                    mediaType: $0.mediaType,
+                    byteCount: $0.byteCount
+                )
+            }
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = (try? encoder.encode(canonical)) ?? Data()
+        return Data(SHA256.hash(data: data)).base64EncodedString()
     }
 
     private func modelSupports(

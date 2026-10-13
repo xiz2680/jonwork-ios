@@ -231,9 +231,15 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
         clientID: String,
         afterEventID: String
     ) -> AsyncThrowingStream<PiGatewayWire.Event, Error> {
-        AsyncThrowingStream(bufferingPolicy: .bufferingOldest(Self.maximumQueuedEvents)) { continuation in
+        let connectTimeoutMilliseconds = stateLock.withLock {
+            discoveredLimits?.sseConnectTimeoutMs
+        }
+        return AsyncThrowingStream(bufferingPolicy: .bufferingOldest(Self.maximumQueuedEvents)) { continuation in
             let task = Task { [session, configuration] in
                 do {
+                    guard let connectTimeoutMilliseconds else {
+                        throw PiServiceError.capabilityUnavailable(["discovery"])
+                    }
                     var components = URLComponents(
                         url: configuration.baseURL.appending(path: "v1/sessions/\(try Self.segment(sessionID))/events"),
                         resolvingAgainstBaseURL: false
@@ -244,7 +250,11 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
                     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
                     request.setValue(afterEventID, forHTTPHeaderField: "Last-Event-ID")
                     try Self.authorize(&request, token: configuration.token)
-                    let (bytes, response) = try await session.bytes(for: request)
+                    let (bytes, response) = try await Self.connectEventStream(
+                        session: session,
+                        request: request,
+                        timeoutMilliseconds: connectTimeoutMilliseconds
+                    )
                     try Self.validate(response: response, data: nil)
                     guard response.mimeType == "text/event-stream" else { throw PiServiceError.invalidResponse }
 
@@ -269,6 +279,31 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
                 }
             }
             continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private static func connectEventStream(
+        session: URLSession,
+        request: URLRequest,
+        timeoutMilliseconds: Int
+    ) async throws -> (URLSession.AsyncBytes, URLResponse) {
+        let nanoseconds = UInt64(timeoutMilliseconds).multipliedReportingOverflow(by: 1_000_000)
+        guard timeoutMilliseconds > 0, !nanoseconds.overflow else {
+            throw PiServiceError.invalidResponse
+        }
+        return try await withThrowingTaskGroup(
+            of: (URLSession.AsyncBytes, URLResponse).self
+        ) { group in
+            group.addTask { try await session.bytes(for: request) }
+            group.addTask {
+                try await Task.sleep(nanoseconds: nanoseconds.partialValue)
+                throw PiServiceError.timedOut
+            }
+            defer { group.cancelAll() }
+            guard let connection = try await group.next() else {
+                throw PiServiceError.invalidResponse
+            }
+            return connection
         }
     }
 
@@ -570,6 +605,229 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
         case .terminated: throw CancellationError()
         @unknown default: throw PiServiceError.eventQueueOverflow
         }
+    }
+}
+
+final class PiRefreshingService: PiServiceProtocol, @unchecked Sendable {
+    private struct State {
+        let service: any PiServiceProtocol
+        let accessToken: String
+    }
+
+    private let baseURL: URL
+    private let discoveryDocument: PiGatewayWire.Discovery
+    private let credentialProvider: PiCredentialProvider
+    private let serviceFactory: (PiServerProfile) throws -> any PiServiceProtocol
+    private let authenticationFailure: @Sendable () async -> Void
+    private let lock = NSLock()
+    private var state: State
+
+    init(
+        baseURL: URL,
+        accessToken: String,
+        discovery: PiGatewayWire.Discovery,
+        credentialProvider: PiCredentialProvider,
+        serviceFactory: @escaping (PiServerProfile) throws -> any PiServiceProtocol,
+        authenticationFailure: @escaping @Sendable () async -> Void
+    ) throws {
+        self.baseURL = baseURL
+        discoveryDocument = discovery
+        self.credentialProvider = credentialProvider
+        self.serviceFactory = serviceFactory
+        self.authenticationFailure = authenticationFailure
+        state = .init(
+            service: try serviceFactory(.init(baseURL: baseURL, token: accessToken)),
+            accessToken: accessToken
+        )
+    }
+
+    func cancelAllRequests() async {
+        await currentState().service.cancelAllRequests()
+    }
+
+    func discover() async throws -> PiGatewayWire.Discovery {
+        let value = try await retryOnce { try await $0.discover() }
+        guard value == discoveryDocument else { throw PiServiceError.invalidResponse }
+        return value
+    }
+
+    func listRepositories() async throws -> [PiGatewayWire.Repository] {
+        try await retryOnce { try await $0.listRepositories() }
+    }
+
+    func listModels() async throws -> [PiGatewayWire.Model] {
+        try await retryOnce { try await $0.listModels() }
+    }
+
+    func listSessions(repositoryID: String?) async throws -> [PiGatewayWire.SessionSummary] {
+        try await retryOnce { try await $0.listSessions(repositoryID: repositoryID) }
+    }
+
+    func createSession(
+        repositoryID: String,
+        name: String?,
+        clientID: String,
+        idempotencyKey: String
+    ) async throws -> PiGatewayWire.Snapshot {
+        try await retryOnce {
+            try await $0.createSession(
+                repositoryID: repositoryID,
+                name: name,
+                clientID: clientID,
+                idempotencyKey: idempotencyKey
+            )
+        }
+    }
+
+    func restoreSession(
+        sessionID: String,
+        clientID: String,
+        context: PiMutationContext
+    ) async throws -> PiGatewayWire.Snapshot {
+        try await retryOnce {
+            try await $0.restoreSession(sessionID: sessionID, clientID: clientID, context: context)
+        }
+    }
+
+    func snapshot(sessionID: String) async throws -> PiGatewayWire.Snapshot {
+        try await retryOnce { try await $0.snapshot(sessionID: sessionID) }
+    }
+
+    func events(
+        sessionID: String,
+        clientID: String,
+        afterEventID: String
+    ) -> AsyncThrowingStream<PiGatewayWire.Event, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                var cursor = afterEventID
+                var retried = false
+                do {
+                    while true {
+                        let current = currentState()
+                        do {
+                            for try await event in current.service.events(
+                                sessionID: sessionID,
+                                clientID: clientID,
+                                afterEventID: cursor
+                            ) {
+                                cursor = event.id
+                                continuation.yield(event)
+                            }
+                            throw PiServiceError.eventStreamEnded
+                        } catch PiServiceError.authenticationRequired where !retried {
+                            retried = true
+                            _ = try await refreshedService(rejectedAccessToken: current.accessToken)
+                        }
+                    }
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch PiServiceError.authenticationRequired {
+                    await failAuthentication()
+                    continuation.finish(throwing: PiServiceError.authenticationRequired)
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    func mutate(
+        _ action: PiConversationAction,
+        sessionID: String,
+        clientID: String,
+        context: PiMutationContext
+    ) async throws -> PiGatewayWire.MutationReceipt {
+        try await retryOnce {
+            try await $0.mutate(action, sessionID: sessionID, clientID: clientID, context: context)
+        }
+    }
+
+    func mutationReceipt(
+        sessionID: String,
+        idempotencyKey: String,
+        clientID: String
+    ) async throws -> PiGatewayWire.MutationReceiptLookup {
+        try await retryOnce {
+            try await $0.mutationReceipt(
+                sessionID: sessionID,
+                idempotencyKey: idempotencyKey,
+                clientID: clientID
+            )
+        }
+    }
+
+    func uploadAttachment(
+        data: Data,
+        fileName: String,
+        mediaType: String,
+        repositoryID: String,
+        idempotencyKey: String
+    ) async throws -> PiGatewayWire.Attachment {
+        try await retryOnce {
+            try await $0.uploadAttachment(
+                data: data,
+                fileName: fileName,
+                mediaType: mediaType,
+                repositoryID: repositoryID,
+                idempotencyKey: idempotencyKey
+            )
+        }
+    }
+
+    private func retryOnce<Value: Sendable>(
+        _ operation: @Sendable (any PiServiceProtocol) async throws -> Value
+    ) async throws -> Value {
+        let current = currentState()
+        do {
+            return try await operation(current.service)
+        } catch PiServiceError.authenticationRequired {
+            do {
+                let replacement = try await refreshedService(rejectedAccessToken: current.accessToken)
+                do {
+                    return try await operation(replacement)
+                } catch PiServiceError.authenticationRequired {
+                    throw PiServiceError.authenticationRequired
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                await failAuthentication()
+                throw PiServiceError.authenticationRequired
+            }
+        }
+    }
+
+    private func refreshedService(rejectedAccessToken: String) async throws -> any PiServiceProtocol {
+        let beforeRefresh = currentState()
+        if beforeRefresh.accessToken != rejectedAccessToken { return beforeRefresh.service }
+        let accessToken = try await credentialProvider.refresh(rejectedAccessToken: rejectedAccessToken)
+        let afterRefresh = currentState()
+        if afterRefresh.accessToken == accessToken { return afterRefresh.service }
+        let replacement = try serviceFactory(.init(baseURL: baseURL, token: accessToken))
+        let replacementDiscovery = try await replacement.discover()
+        guard replacementDiscovery == discoveryDocument else { throw PiServiceError.invalidResponse }
+        let previous = lock.withLock { () -> (any PiServiceProtocol)? in
+            if state.accessToken == accessToken { return nil }
+            let previous = state.service
+            state = .init(service: replacement, accessToken: accessToken)
+            return previous
+        }
+        if let previous {
+            await previous.cancelAllRequests()
+            return replacement
+        }
+        await replacement.cancelAllRequests()
+        return currentState().service
+    }
+
+    private func currentState() -> State { lock.withLock { state } }
+
+    private func failAuthentication() async {
+        await credentialProvider.invalidate()
+        await currentState().service.cancelAllRequests()
+        await authenticationFailure()
     }
 }
 

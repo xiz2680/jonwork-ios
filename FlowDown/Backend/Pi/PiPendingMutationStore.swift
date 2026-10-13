@@ -44,17 +44,45 @@ struct PiPendingCreationRecord: Codable, Equatable, Sendable {
     let expiresAt: Date
 }
 
+struct PiPendingAttachmentUploadRecord: Codable, Equatable, Sendable {
+    let repositoryID: String
+    let digest: String
+    let fileName: String
+    let mediaType: String
+    let byteCount: Int
+    let idempotencyKey: String
+    let attachmentID: String?
+    let serverSHA256: String?
+}
+
+struct PiPendingAttachmentBatch: Codable, Equatable, Sendable {
+    let sessionID: String
+    let repositoryID: String
+    let requestDigest: String
+    let uploads: [PiPendingAttachmentUploadRecord]
+    let createdAt: Date
+    let expiresAt: Date
+}
+
 protocol PiPendingMutationStoring: Sendable {
     func load() throws -> [String: PiPendingMutationRecord]
     func save(_ records: [String: PiPendingMutationRecord]) throws
     func loadCreation() throws -> PiPendingCreationRecord?
     func saveCreation(_ record: PiPendingCreationRecord?) throws
+    func loadAttachmentUploads() throws -> [String: PiPendingAttachmentBatch]
+    func saveAttachmentUploads(_ records: [String: PiPendingAttachmentBatch]) throws
+}
+
+extension PiPendingMutationStoring {
+    func loadAttachmentUploads() throws -> [String: PiPendingAttachmentBatch] { [:] }
+    func saveAttachmentUploads(_: [String: PiPendingAttachmentBatch]) throws {}
 }
 
 struct PiPendingMutationStore: PiPendingMutationStoring, Sendable {
     private let service = "com.jonwork.ios.pi-pending-mutations"
     private let account = "records"
     private let creationAccount = "creation"
+    private let attachmentAccount = "attachment-uploads"
 
     func load() throws -> [String: PiPendingMutationRecord] {
         var result: CFTypeRef?
@@ -85,6 +113,16 @@ struct PiPendingMutationStore: PiPendingMutationStoring, Sendable {
     func saveCreation(_ record: PiPendingCreationRecord?) throws {
         let data = try record.map { try JSONEncoder().encode($0) }
         try save(data, account: creationAccount)
+    }
+
+    func loadAttachmentUploads() throws -> [String: PiPendingAttachmentBatch] {
+        guard let data = try load(account: attachmentAccount) else { return [:] }
+        return try JSONDecoder().decode([String: PiPendingAttachmentBatch].self, from: data)
+    }
+
+    func saveAttachmentUploads(_ records: [String: PiPendingAttachmentBatch]) throws {
+        let data = records.isEmpty ? nil : try JSONEncoder().encode(records)
+        try save(data, account: attachmentAccount)
     }
 
     private func load(account: String) throws -> Data? {

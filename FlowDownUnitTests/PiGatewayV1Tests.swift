@@ -69,6 +69,102 @@ struct PiGatewayV1Tests {
     }
 
     @Test
+    func `operation lifecycle rejects duplicate abort and inconsistent retry source`() throws {
+        let snapshot = try decodeFixture(PiGatewayWire.Snapshot.self, "snapshot.json")
+        var duplicateAbort = PiEventAdapter(replayRetentionEvents: 16)
+        _ = try duplicateAbort.replace(with: snapshot, clientID: "ios-01")
+        _ = try duplicateAbort.adapt(event(
+            id: 13, type: "operation.accepted",
+            data: ["operationId": "operation-01", "command": "prompt", "retryOfOperationId": NSNull()]
+        ))
+        _ = try duplicateAbort.adapt(event(
+            id: 14, type: "abort.requested",
+            data: ["operationId": "operation-01", "requestedByClientId": "ios-01"]
+        ))
+        #expect(throws: PiAdapterError.invalidEventLifecycle) {
+            try duplicateAbort.adapt(self.event(
+                id: 15, type: "abort.requested",
+                data: ["operationId": "operation-01", "requestedByClientId": "ios-01"]
+            ))
+        }
+
+        var retry = PiEventAdapter(replayRetentionEvents: 16)
+        _ = try retry.replace(with: snapshot, clientID: "ios-01")
+        _ = try retry.adapt(event(
+            id: 13, type: "operation.accepted",
+            data: ["operationId": "source", "command": "prompt", "retryOfOperationId": NSNull()]
+        ))
+        _ = try retry.adapt(event(
+            id: 14, type: "operation.settled",
+            data: ["operationId": "source", "status": "completed", "retryOfOperationId": NSNull(), "error": NSNull()]
+        ))
+        _ = try retry.adapt(event(
+            id: 15, type: "operation.accepted",
+            data: ["operationId": "retry", "command": "retry", "retryOfOperationId": "source"]
+        ))
+        #expect(throws: PiAdapterError.invalidEventLifecycle) {
+            try retry.adapt(self.event(
+                id: 16, type: "operation.settled",
+                data: ["operationId": "retry", "status": "completed", "retryOfOperationId": NSNull(), "error": NSNull()]
+            ))
+        }
+        #expect(PiAdapterError.invalidEventLifecycle.requiresSnapshotRecovery)
+    }
+
+    @Test
+    func `valid retry and explicit release preserve lifecycle ordering`() throws {
+        let snapshot = try decodeFixture(PiGatewayWire.Snapshot.self, "snapshot.json")
+        var adapter = PiEventAdapter(replayRetentionEvents: 16)
+        _ = try adapter.replace(with: snapshot, clientID: "ios-01")
+        _ = try adapter.adapt(event(
+            id: 13, type: "operation.accepted",
+            data: ["operationId": "source", "command": "prompt", "retryOfOperationId": NSNull()]
+        ))
+        _ = try adapter.adapt(event(
+            id: 14, type: "operation.settled",
+            data: ["operationId": "source", "status": "completed", "retryOfOperationId": NSNull(), "error": NSNull()]
+        ))
+        _ = try adapter.adapt(event(
+            id: 15, type: "operation.accepted",
+            data: ["operationId": "retry", "command": "retry", "retryOfOperationId": "source"]
+        ))
+        _ = try adapter.adapt(event(
+            id: 16, type: "operation.settled",
+            data: ["operationId": "retry", "status": "completed", "retryOfOperationId": "source", "error": NSNull()]
+        ))
+        _ = try adapter.adapt(event(
+            id: 17, type: "controller.changed",
+            data: ["previousControllerClientId": "ios-01", "controllerClientId": NSNull(), "reason": "release"]
+        ))
+        let released = try adapter.adapt(event(
+            id: 18, type: "session.released", data: ["byClientId": "ios-01"]
+        ))
+        #expect(released == .released(byClientID: "ios-01"))
+
+        var invalidRelease = PiEventAdapter(replayRetentionEvents: 16)
+        _ = try invalidRelease.replace(with: snapshot, clientID: "ios-01")
+        #expect(throws: PiAdapterError.invalidEventLifecycle) {
+            try invalidRelease.adapt(self.event(
+                id: 13, type: "session.released", data: ["byClientId": "ios-01"]
+            ))
+        }
+    }
+
+    @Test
+    func `terminal tombstones are bounded while cursor still rejects compacted replay`() throws {
+        let snapshot = try decodeFixture(PiGatewayWire.Snapshot.self, "snapshot.json")
+        let events = try decodeFixture([PiGatewayWire.Event].self, "events.json")
+        var adapter = PiEventAdapter(replayRetentionEvents: 2)
+        _ = try adapter.replace(with: snapshot, clientID: "ios-01")
+        for event in events { _ = try adapter.adapt(event) }
+
+        #expect(adapter.retainedTerminalStateCount <= 2)
+        #expect(throws: PiAdapterError.outOfOrderEvent) {
+            try adapter.adapt(events[7])
+        }
+    }
+
+    @Test
     func `SSE parser requires matching id event and data record fields`() throws {
         var parser = PiSSERecordParser(maximumEventBytes: 1024, maximumBufferedEventBytes: 2048)
         var record: PiSSERecord?
@@ -78,6 +174,50 @@ struct PiGatewayV1Tests {
         }
         #expect(record?.id == "13")
         #expect(record?.event == "operation.accepted")
+    }
+
+    @Test
+    func `SSE connect timeout applies while initial headers are delayed`() async throws {
+        let discovery = try discoveryFixture(sseConnectTimeoutMilliseconds: 25)
+        let record = sseGatewayErrorRecord
+        PiGatewayURLProtocol.eventHeaderDelayNanoseconds = 150_000_000
+        defer { PiGatewayURLProtocol.resetEventDelays() }
+        PiGatewayURLProtocol.handler = { request in
+            if request.url?.path == "/.well-known/pi-gateway" {
+                return (200, discovery)
+            }
+            return (200, record)
+        }
+        let service = try makeService()
+        _ = try await service.discover()
+
+        await #expect(throws: PiServiceError.timedOut) {
+            _ = try await self.firstEvent(from: service.events(
+                sessionID: "session-01", clientID: "ios-01", afterEventID: "12"
+            ))
+        }
+    }
+
+    @Test
+    func `SSE connect timeout is cancelled after headers for a long lived stream`() async throws {
+        let discovery = try discoveryFixture(sseConnectTimeoutMilliseconds: 25)
+        let record = sseGatewayErrorRecord
+        PiGatewayURLProtocol.eventBodyDelayNanoseconds = 150_000_000
+        defer { PiGatewayURLProtocol.resetEventDelays() }
+        PiGatewayURLProtocol.handler = { request in
+            if request.url?.path == "/.well-known/pi-gateway" {
+                return (200, discovery)
+            }
+            return (200, record)
+        }
+        let service = try makeService()
+        _ = try await service.discover()
+
+        let event = try await firstEvent(from: service.events(
+            sessionID: "session-01", clientID: "ios-01", afterEventID: "12"
+        ))
+        #expect(event.id == "13")
+        #expect(event.type == "gateway.error")
     }
 
     @Test
@@ -406,6 +546,48 @@ struct PiGatewayV1Tests {
         try JSONDecoder.piGateway.decode(type, from: fixture(name))
     }
 
+    private func event(id: Int, type: String, data: [String: Any]) throws -> PiGatewayWire.Event {
+        let object: [String: Any] = [
+            "contract": PiGatewayWire.contract,
+            "id": String(id),
+            "sessionId": "session-01",
+            "sessionRevision": 8,
+            "occurredAt": "2026-10-13T08:00:00.000Z",
+            "type": type,
+            "data": data,
+        ]
+        return try JSONDecoder.piGateway.decode(
+            PiGatewayWire.Event.self,
+            from: JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        )
+    }
+
+    private func discoveryFixture(sseConnectTimeoutMilliseconds: Int) throws -> String {
+        let original = try #require(String(data: fixture("discovery.json"), encoding: .utf8))
+        let replaced = original.replacingOccurrences(
+            of: #""sseConnectTimeoutMs":15000"#,
+            with: #""sseConnectTimeoutMs":\#(sseConnectTimeoutMilliseconds)"#
+        )
+        return try #require(replaced == original ? nil : replaced)
+    }
+
+    private var sseGatewayErrorRecord: String {
+        """
+        id: 13
+        event: gateway.error
+        data: {"contract":"pi-gateway/1.0","id":"13","sessionId":"session-01","sessionRevision":8,"occurredAt":"2026-10-13T08:00:00.000Z","type":"gateway.error","data":{"operationId":null,"error":{"code":"notice","message":"Notice","retryable":false}}}
+
+
+        """
+    }
+
+    private func firstEvent(
+        from stream: AsyncThrowingStream<PiGatewayWire.Event, Error>
+    ) async throws -> PiGatewayWire.Event {
+        var iterator = stream.makeAsyncIterator()
+        return try #require(try await iterator.next())
+    }
+
     private func fixture(_ name: String) throws -> Data {
         let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("Fixtures/PiGatewayV1", isDirectory: true)
@@ -448,24 +630,55 @@ private final class PiGatewayURLProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) throws -> (Int, String))?
     nonisolated(unsafe) static var requests: [URLRequest] = []
     nonisolated(unsafe) static var responseHeaders: [String: String] = [:]
+    nonisolated(unsafe) static var eventHeaderDelayNanoseconds: UInt64 = 0
+    nonisolated(unsafe) static var eventBodyDelayNanoseconds: UInt64 = 0
+    private var loadingTask: Task<Void, Never>?
+
+    static func resetEventDelays() {
+        eventHeaderDelayNanoseconds = 0
+        eventBodyDelayNanoseconds = 0
+    }
+
     override class func canInit(with _: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         do {
             Self.requests.append(request)
             let result = try Self.handler?(request) ?? (500, #"{"error":{"code":"internal_error","message":"Missing test handler","requestId":"test","retryable":false}}"#)
-            var headers = ["Content-Type": "application/json", "ETag": #""8""#]
+            let isEventStream = request.url?.path.hasSuffix("/events") == true
+            var headers = [
+                "Content-Type": isEventStream ? "text/event-stream" : "application/json",
+                "ETag": #""8""#,
+            ]
             headers.merge(Self.responseHeaders) { _, override in override }
             let response = HTTPURLResponse(
                 url: request.url!, statusCode: result.0, httpVersion: nil,
                 headerFields: headers
             )!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data(result.1.utf8))
-            client?.urlProtocolDidFinishLoading(self)
+            let headerDelay = isEventStream ? Self.eventHeaderDelayNanoseconds : 0
+            let bodyDelay = isEventStream ? Self.eventBodyDelayNanoseconds : 0
+            loadingTask = Task { [weak self] in
+                do {
+                    if headerDelay > 0 { try await Task.sleep(nanoseconds: headerDelay) }
+                    guard let self else { return }
+                    self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                    if bodyDelay > 0 { try await Task.sleep(nanoseconds: bodyDelay) }
+                    try Task.checkCancellation()
+                    self.client?.urlProtocol(self, didLoad: Data(result.1.utf8))
+                    self.client?.urlProtocolDidFinishLoading(self)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    return
+                }
+            }
         } catch {
             client?.urlProtocol(self, didFailWithError: error)
         }
     }
-    override func stopLoading() {}
+    override func stopLoading() {
+        loadingTask?.cancel()
+        loadingTask = nil
+        client?.urlProtocol(self, didFailWithError: URLError(.cancelled))
+    }
 }

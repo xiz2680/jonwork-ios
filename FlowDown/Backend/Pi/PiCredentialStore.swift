@@ -79,25 +79,15 @@ struct PiCredentialStore: PiCredentialStoring, Sendable {
 
     func saveOAuthTokens(_ tokens: PiOAuthTokens, server: URL) throws {
         let prefix = account(server) + "#oauth"
-        try save(Data(tokens.accessToken.utf8), account: prefix + ".access")
-        if let refreshToken = tokens.refreshToken {
-            try save(Data(refreshToken.utf8), account: prefix + ".refresh")
-        } else {
-            try remove(account: prefix + ".refresh")
-        }
-        try save(Data(String(tokens.expiresAt.timeIntervalSince1970).utf8), account: prefix + ".expiry")
-        if let refreshExpiresAt = tokens.refreshExpiresAt {
-            try save(
-                Data(String(refreshExpiresAt.timeIntervalSince1970).utf8),
-                account: prefix + ".refresh-expiry"
-            )
-        } else {
-            try remove(account: prefix + ".refresh-expiry")
-        }
+        try save(JSONEncoder().encode(tokens), account: prefix + ".bundle")
+        try? removeLegacyOAuthAccounts(prefix: prefix)
     }
 
     func oauthTokens(server: URL) throws -> PiOAuthTokens? {
         let prefix = account(server) + "#oauth"
+        if let bundle = try data(account: prefix + ".bundle") {
+            return try JSONDecoder().decode(PiOAuthTokens.self, from: bundle)
+        }
         guard let accessData = try data(account: prefix + ".access"),
               let accessToken = String(data: accessData, encoding: .utf8),
               !accessToken.isEmpty,
@@ -121,11 +111,16 @@ struct PiCredentialStore: PiCredentialStoring, Sendable {
 
     func removeOAuthTokens(server: URL) throws {
         let prefix = account(server) + "#oauth"
+        try remove(account: prefix + ".bundle")
+        try removeLegacyOAuthAccounts(prefix: prefix)
+        try removeToken(server: server)
+    }
+
+    private func removeLegacyOAuthAccounts(prefix: String) throws {
         try remove(account: prefix + ".access")
         try remove(account: prefix + ".refresh")
         try remove(account: prefix + ".expiry")
         try remove(account: prefix + ".refresh-expiry")
-        try removeToken(server: server)
     }
 
     private func save(_ data: Data, account: String) throws {

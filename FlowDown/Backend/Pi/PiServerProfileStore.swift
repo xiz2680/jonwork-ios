@@ -5,7 +5,7 @@ struct PiServerProfile: Equatable, Sendable {
     let token: String?
 }
 
-struct PiServerProfileStore {
+struct PiServerProfileStore: @unchecked Sendable {
     private let baseURLKey = "Pi.Server.BaseURL"
     private let defaults: UserDefaults
     private let credentials: any PiCredentialStoring
@@ -71,6 +71,10 @@ struct PiServerProfileStore {
 
     func removeSavedToken() throws {
         guard let rawURL = defaults.string(forKey: baseURLKey), let baseURL = URL(string: rawURL) else { return }
+        try credentials.removeOAuthTokens(server: baseURL)
+    }
+
+    func removeOAuthTokens(baseURL: URL) throws {
         try credentials.removeOAuthTokens(server: baseURL)
     }
 

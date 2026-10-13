@@ -29,6 +29,97 @@ protocol PiOAuthAuthorizing: Sendable {
     func revoke(_ tokens: PiOAuthTokens, discovery: PiGatewayWire.Discovery) async throws
 }
 
+actor PiCredentialProvider {
+    private let baseURL: URL
+    private let authorizer: any PiOAuthAuthorizing
+    private let discovery: PiGatewayWire.Discovery
+    private let profileStore: PiServerProfileStore
+    private var tokens: PiOAuthTokens?
+    private var generation: UInt64 = 0
+    private var refreshTask: Task<PiOAuthTokens, Error>?
+    private var isActive = true
+
+    init(
+        baseURL: URL,
+        tokens: PiOAuthTokens,
+        authorizer: any PiOAuthAuthorizing,
+        discovery: PiGatewayWire.Discovery,
+        profileStore: PiServerProfileStore
+    ) {
+        self.baseURL = baseURL
+        self.tokens = tokens
+        self.authorizer = authorizer
+        self.discovery = discovery
+        self.profileStore = profileStore
+    }
+
+    func accessToken() throws -> String {
+        guard isActive, let tokens else { throw PiServiceError.authenticationRequired }
+        return tokens.accessToken
+    }
+
+    func refresh(rejectedAccessToken: String) async throws -> String {
+        guard isActive, let current = tokens else { throw PiServiceError.authenticationRequired }
+        if current.accessToken != rejectedAccessToken { return current.accessToken }
+        guard current.canRefresh else {
+            failClosed()
+            throw PiServiceError.authenticationRequired
+        }
+
+        let refreshGeneration = generation
+        let task: Task<PiOAuthTokens, Error>
+        if let refreshTask {
+            task = refreshTask
+        } else {
+            task = Task { [authorizer, discovery] in
+                try await authorizer.refresh(current, discovery: discovery)
+            }
+            refreshTask = task
+        }
+
+        do {
+            let refreshed = try await task.value
+            guard isActive, generation == refreshGeneration, !Task.isCancelled else {
+                throw CancellationError()
+            }
+            if let tokens, tokens.accessToken != rejectedAccessToken {
+                refreshTask = nil
+                return tokens.accessToken
+            }
+            try profileStore.save(baseURL: baseURL, oauthTokens: refreshed)
+            tokens = refreshed
+            refreshTask = nil
+            return refreshed.accessToken
+        } catch is CancellationError {
+            if generation == refreshGeneration { refreshTask = nil }
+            throw CancellationError()
+        } catch {
+            if generation == refreshGeneration {
+                refreshTask = nil
+                failClosed()
+            }
+            throw PiServiceError.authenticationRequired
+        }
+    }
+
+    func invalidate() {
+        generation &+= 1
+        isActive = false
+        tokens = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+    }
+
+    private func failClosed() {
+        generation &+= 1
+        isActive = false
+        tokens = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+        try? profileStore.removeOAuthTokens(baseURL: baseURL)
+    }
+}
+
 extension PiOAuthAuthorizing {
     func revoke(_: PiOAuthTokens, discovery _: PiGatewayWire.Discovery) async throws {}
 }

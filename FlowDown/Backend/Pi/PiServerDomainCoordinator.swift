@@ -102,6 +102,8 @@ final class PiServerDomainCoordinator {
     private var creationInFlight = false
     private var authenticationGeneration: UInt64 = 0
     private var authenticationTask: Task<PiServerPresentation, Error>?
+    private var credentialProvider: PiCredentialProvider?
+    private var authenticatedServiceFactory: (() throws -> any PiServiceProtocol)?
     private(set) var presentation = PiServerPresentation()
 
     init(
@@ -169,6 +171,13 @@ final class PiServerDomainCoordinator {
         )
         try validateAuthentication(generation)
         try profileStore.save(baseURL: baseURL, oauthTokens: tokens)
+        try await configureAuthenticatedServices(
+            baseURL: baseURL,
+            tokens: tokens,
+            authorizer: authorizer,
+            discovery: discovery,
+            generation: generation
+        )
         oauthContext = (authorizer, discovery)
         do {
             return try await connectAuthenticated(
@@ -182,6 +191,13 @@ final class PiServerDomainCoordinator {
             let replacement = try await authorizer.authorize(discovery: discovery, baseURL: baseURL)
             try validateAuthentication(generation)
             try profileStore.save(baseURL: baseURL, oauthTokens: replacement)
+            try await configureAuthenticatedServices(
+                baseURL: baseURL,
+                tokens: replacement,
+                authorizer: authorizer,
+                discovery: discovery,
+                generation: generation
+            )
             return try await connectAuthenticated(
                 baseURL: baseURL,
                 accessToken: replacement.accessToken,
@@ -225,7 +241,11 @@ final class PiServerDomainCoordinator {
         authenticationGeneration: UInt64? = nil
     ) async throws -> PiServerPresentation {
         let profile = PiServerProfile(baseURL: baseURL, token: accessToken)
-        let service = try serviceFactory(profile)
+        let service = if !persistLegacyToken, let authenticatedServiceFactory {
+            try authenticatedServiceFactory()
+        } else {
+            try serviceFactory(profile)
+        }
         let discovery = try await service.discover()
         if let authenticationGeneration { try validateAuthentication(authenticationGeneration) }
         let repositories = try await service.listRepositories()
@@ -385,6 +405,11 @@ final class PiServerDomainCoordinator {
 
     func signOut() async throws {
         authenticationGeneration &+= 1
+        let credentialProvider = credentialProvider
+        self.credentialProvider = nil
+        authenticatedServiceFactory = nil
+        sessionCoordinator.clearAuthenticatedServiceFactory()
+        await credentialProvider?.invalidate()
         let authenticationTask = authenticationTask
         self.authenticationTask = nil
         authenticationTask?.cancel()
@@ -405,6 +430,7 @@ final class PiServerDomainCoordinator {
         do {
             try pendingMutationStore.save([:])
             try pendingMutationStore.saveCreation(nil)
+            try pendingMutationStore.saveAttachmentUploads([:])
             pendingCreationStoreLoadFailed = false
         } catch {
             pendingCreationStoreLoadFailed = true
@@ -425,6 +451,56 @@ final class PiServerDomainCoordinator {
         try profileStore.removeSavedToken()
         if let revocationError { throw revocationError }
         if let pendingCleanupError { throw pendingCleanupError }
+    }
+
+    private func configureAuthenticatedServices(
+        baseURL: URL,
+        tokens: PiOAuthTokens,
+        authorizer: any PiOAuthAuthorizing,
+        discovery: PiGatewayWire.Discovery,
+        generation: UInt64
+    ) async throws {
+        try validateAuthentication(generation)
+        await credentialProvider?.invalidate()
+        try validateAuthentication(generation)
+        let provider = PiCredentialProvider(
+            baseURL: baseURL,
+            tokens: tokens,
+            authorizer: authorizer,
+            discovery: discovery,
+            profileStore: profileStore
+        )
+        let serviceFactory = serviceFactory
+        let factory = {
+            try PiRefreshingService(
+                baseURL: baseURL,
+                accessToken: tokens.accessToken,
+                discovery: discovery,
+                credentialProvider: provider,
+                serviceFactory: serviceFactory,
+                authenticationFailure: { @MainActor [weak self] in
+                    await self?.failClosedAuthentication()
+                }
+            )
+        }
+        credentialProvider = provider
+        authenticatedServiceFactory = factory
+        sessionCoordinator.installAuthenticatedServiceFactory(baseURL: baseURL, factory: factory)
+    }
+
+    private func failClosedAuthentication() async {
+        authenticationGeneration &+= 1
+        authenticationTask?.cancel()
+        authenticationTask = nil
+        credentialProvider = nil
+        authenticatedServiceFactory = nil
+        service = nil
+        discovery = nil
+        oauthContext = nil
+        creationInFlight = false
+        presentation = .init()
+        sessionCoordinator.clearAuthenticatedServiceFactory()
+        await sessionCoordinator.revokeAllCredentialsAndState()
     }
 
     private func validateAuthentication(_ generation: UInt64) throws {

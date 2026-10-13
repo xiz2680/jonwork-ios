@@ -214,6 +214,144 @@ struct PiServerProfileStoreTests {
         #expect(pendingCreation?.idempotencyKey == firstKey)
     }
 
+    @Test
+    func `concurrent session 401 responses share one rotated refresh and persist it`() async throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        let url = try #require(URL(string: "https://pi.example.test"))
+        let old = PiOAuthTokens(
+            accessToken: "old-access", refreshToken: "old-refresh",
+            expiresAt: Date().addingTimeInterval(900)
+        )
+        let rotated = PiOAuthTokens(
+            accessToken: "new-access", refreshToken: "new-refresh",
+            expiresAt: Date().addingTimeInterval(900)
+        )
+        try context.store.save(baseURL: url, oauthTokens: old)
+        let authorizer = ControlledRefreshAuthorizer(result: .success(rotated), suspended: true)
+        let provider = PiCredentialProvider(
+            baseURL: url, tokens: old, authorizer: authorizer,
+            discovery: authRaceDiscovery(), profileStore: context.store
+        )
+        let service = try PiRefreshingService(
+            baseURL: url, accessToken: old.accessToken, discovery: authRaceDiscovery(),
+            credentialProvider: provider,
+            serviceFactory: { TokenAwareService(token: $0.token, validToken: rotated.accessToken) },
+            authenticationFailure: {}
+        )
+
+        async let snapshot = service.snapshot(sessionID: "session")
+        async let receipt = service.mutationReceipt(
+            sessionID: "session", idempotencyKey: "request-1234", clientID: "ios"
+        )
+        while !authorizer.isWaitingForResume { await Task.yield() }
+        authorizer.resume()
+
+        let snapshotValue = try await snapshot
+        let receiptValue = try await receipt
+        #expect(snapshotValue.sessionId == "session")
+        #expect(receiptValue == .pending(sessionId: "session"))
+        #expect(authorizer.refreshCount == 1)
+        #expect(try context.store.oauthTokens(baseURL: url) == rotated)
+    }
+
+    @Test
+    func `credential invalidation fences a suspended refresh from restoring tokens`() async throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        let url = try #require(URL(string: "https://pi.example.test"))
+        let old = PiOAuthTokens(
+            accessToken: "old-access", refreshToken: "old-refresh",
+            expiresAt: Date().addingTimeInterval(900)
+        )
+        let rotated = PiOAuthTokens(
+            accessToken: "new-access", refreshToken: "new-refresh",
+            expiresAt: Date().addingTimeInterval(900)
+        )
+        try context.store.save(baseURL: url, oauthTokens: old)
+        let authorizer = ControlledRefreshAuthorizer(result: .success(rotated), suspended: true)
+        let provider = PiCredentialProvider(
+            baseURL: url, tokens: old, authorizer: authorizer,
+            discovery: authRaceDiscovery(), profileStore: context.store
+        )
+        let refresh = Task { try await provider.refresh(rejectedAccessToken: old.accessToken) }
+        while !authorizer.isWaitingForResume { await Task.yield() }
+
+        await provider.invalidate()
+        try context.store.removeSavedToken()
+        authorizer.resume()
+
+        await #expect(throws: CancellationError.self) { _ = try await refresh.value }
+        #expect(try context.store.oauthTokens(baseURL: url) == nil)
+    }
+
+    @Test
+    func `a second 401 is not refreshed again and revokes authority`() async throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        let url = try #require(URL(string: "https://pi.example.test"))
+        let old = PiOAuthTokens(
+            accessToken: "old-access", refreshToken: "old-refresh",
+            expiresAt: Date().addingTimeInterval(900)
+        )
+        let rotated = PiOAuthTokens(
+            accessToken: "new-access", refreshToken: "new-refresh",
+            expiresAt: Date().addingTimeInterval(900)
+        )
+        try context.store.save(baseURL: url, oauthTokens: old)
+        let authorizer = ControlledRefreshAuthorizer(result: .success(rotated))
+        let provider = PiCredentialProvider(
+            baseURL: url, tokens: old, authorizer: authorizer,
+            discovery: authRaceDiscovery(), profileStore: context.store
+        )
+        let failures = AuthenticationFailureCounter()
+        let service = try PiRefreshingService(
+            baseURL: url, accessToken: old.accessToken, discovery: authRaceDiscovery(),
+            credentialProvider: provider,
+            serviceFactory: { TokenAwareService(token: $0.token, validToken: "never-valid") },
+            authenticationFailure: { await failures.record() }
+        )
+
+        await #expect(throws: PiServiceError.authenticationRequired) {
+            _ = try await service.snapshot(sessionID: "session")
+        }
+        #expect(authorizer.refreshCount == 1)
+        let failureCount = await failures.count
+        #expect(failureCount == 1)
+    }
+
+    @Test
+    func `refresh failure clears persisted credentials and revokes authority`() async throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        let url = try #require(URL(string: "https://pi.example.test"))
+        let old = PiOAuthTokens(
+            accessToken: "old-access", refreshToken: "old-refresh",
+            expiresAt: Date().addingTimeInterval(900)
+        )
+        try context.store.save(baseURL: url, oauthTokens: old)
+        let authorizer = ControlledRefreshAuthorizer(result: .failure(PiServiceError.accessDenied))
+        let provider = PiCredentialProvider(
+            baseURL: url, tokens: old, authorizer: authorizer,
+            discovery: authRaceDiscovery(), profileStore: context.store
+        )
+        let failures = AuthenticationFailureCounter()
+        let service = try PiRefreshingService(
+            baseURL: url, accessToken: old.accessToken, discovery: authRaceDiscovery(),
+            credentialProvider: provider,
+            serviceFactory: { TokenAwareService(token: $0.token, validToken: "new-access") },
+            authenticationFailure: { await failures.record() }
+        )
+
+        await #expect(throws: PiServiceError.authenticationRequired) {
+            _ = try await service.snapshot(sessionID: "session")
+        }
+        #expect(authorizer.refreshCount == 1)
+        let failureCount = await failures.count
+        #expect(failureCount == 1)
+        #expect(try context.store.oauthTokens(baseURL: url) == nil)
+    }
+
     @MainActor
     private func makeDomain(
         profileStore: PiServerProfileStore,
@@ -252,6 +390,74 @@ struct PiServerProfileStoreTests {
             defaults,
             suiteName
         )
+    }
+}
+
+private final class ControlledRefreshAuthorizer: PiOAuthAuthorizing, @unchecked Sendable {
+    private let lock = NSLock()
+    private let result: Result<PiOAuthTokens, Error>
+    private let suspended: Bool
+    private var calls = 0
+    private var continuation: CheckedContinuation<PiOAuthTokens, Error>?
+
+    init(result: Result<PiOAuthTokens, Error>, suspended: Bool = false) {
+        self.result = result
+        self.suspended = suspended
+    }
+
+    var refreshCount: Int { lock.withLock { calls } }
+    var isWaitingForResume: Bool { lock.withLock { continuation != nil } }
+
+    @MainActor
+    func authorize(discovery _: PiGatewayWire.Discovery, baseURL _: URL) async throws -> PiOAuthTokens {
+        try result.get()
+    }
+
+    func refresh(_: PiOAuthTokens, discovery _: PiGatewayWire.Discovery) async throws -> PiOAuthTokens {
+        lock.withLock { calls += 1 }
+        guard suspended else { return try result.get() }
+        return try await withCheckedThrowingContinuation { continuation in
+            lock.withLock { self.continuation = continuation }
+        }
+    }
+
+    func resume() {
+        let continuation = lock.withLock { () -> CheckedContinuation<PiOAuthTokens, Error>? in
+            defer { self.continuation = nil }
+            return self.continuation
+        }
+        continuation?.resume(with: result)
+    }
+}
+
+private actor AuthenticationFailureCounter {
+    private(set) var count = 0
+    func record() { count += 1 }
+}
+
+private final class TokenAwareService: PiServiceProtocol, @unchecked Sendable {
+    private let token: String?
+    private let validToken: String
+
+    init(token: String?, validToken: String) {
+        self.token = token
+        self.validToken = validToken
+    }
+
+    func discover() async throws -> PiGatewayWire.Discovery { authRaceDiscovery() }
+
+    func snapshot(sessionID: String) async throws -> PiGatewayWire.Snapshot {
+        guard token == validToken else { throw PiServiceError.authenticationRequired }
+        return recoverySnapshot(sessionID: sessionID)
+    }
+
+    func mutationReceipt(
+        sessionID: String,
+        idempotencyKey _: String,
+        clientID _: String
+    ) async throws -> PiGatewayWire.MutationReceiptLookup {
+        guard token == validToken else { throw PiServiceError.authenticationRequired }
+        return .pending(sessionId: sessionID)
     }
 }
 
