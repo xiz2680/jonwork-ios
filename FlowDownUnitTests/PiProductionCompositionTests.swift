@@ -8,9 +8,189 @@ import Testing
 @Suite(.serialized)
 struct PiProductionCompositionTests {
     @Test
+    func `production surface allows only bound Jonwork conversations`() {
+        #expect(!JonworkSurfacePolicy.productionAllowsLegacyConversations)
+        #expect(!JonworkSurfacePolicy.productionIncludesLegacyMenuCommands)
+        #expect(!JonworkSurfacePolicy.productionAllowsLegacyProviderNetworking)
+        #expect(!JonworkSurfacePolicy.permitsConversation(
+            hasJonworkBinding: false,
+            allowsLegacyConversations: JonworkSurfacePolicy.productionAllowsLegacyConversations
+        ))
+        #expect(JonworkSurfacePolicy.permitsConversation(
+            hasJonworkBinding: true,
+            allowsLegacyConversations: JonworkSurfacePolicy.productionAllowsLegacyConversations
+        ))
+        #expect(!JonworkSurfacePolicy.shouldCreateInitialConversation(
+            isConversationListEmpty: true,
+            allowsLegacyConversations: false
+        ))
+        #expect(!JonworkSurfacePolicy.permitsLegacyConversationActions(
+            hasJonworkBinding: true,
+            allowsLegacyConversations: true
+        ))
+    }
+
+    @Test
+    @MainActor
+    func `production conversation list never creates an implicit local conversation`() async throws {
+        try await FlowDownTestContext.shared.ensureBootstrappedEnvironment()
+        ConversationManager.shared.eraseAll()
+
+        let selectionView = ConversationSelectionView(allowsLegacyConversations: false)
+        selectionView.updateDataSource()
+
+        #expect(ConversationManager.shared.conversations.value.isEmpty)
+        #expect(selectionView.dataSource.snapshot().numberOfItems == 0)
+
+        let onlyConversation = sdb.conversationMake { $0.update(\.title, to: "Temporary") }
+        ConversationManager.shared.scanAll()
+        selectionView.updateDataSource()
+        #expect(selectionView.dataSource.snapshot().numberOfItems == 1)
+
+        ConversationManager.shared.deleteConversation(identifier: onlyConversation.id)
+        selectionView.updateDataSource()
+
+        #expect(ConversationManager.shared.conversations.value.isEmpty)
+        #expect(selectionView.dataSource.snapshot().numberOfItems == 0)
+    }
+
+    @Test
+    @MainActor
+    func `bound Jonwork conversation exposes no legacy menus providers models or tools`() async throws {
+        try await FlowDownTestContext.shared.ensureBootstrappedEnvironment()
+        let conversation = sdb.conversationMake { $0.update(\.title, to: "Bound Jonwork") }
+        ConversationManager.shared.scanAll()
+        let baseURL = try #require(URL(string: "https://pi.example.test"))
+        PiSessionCoordinator.shared.bind(
+            conversationID: conversation.id,
+            sessionID: "session",
+            repository: "/repo",
+            clientID: "client",
+            baseURL: baseURL
+        )
+        defer {
+            PiSessionCoordinator.shared.unbind(conversationID: conversation.id)
+            ConversationManager.shared.deleteConversation(identifier: conversation.id)
+        }
+
+        let view = ChatView(allowsLegacyConversations: false)
+        view.use(conversation: conversation.id)
+
+        var modelCompletionCalled = false
+        var toolReloadCalled = false
+        #expect(view.onRichEditorRequestCurrentModelName() == nil)
+        #expect(view.onRichEditorRequestCurrentModelIdentifier() == nil)
+        #expect(view.onRichEditorRequestObjectForRestore() == nil)
+        #expect(view.onRichEditorBuildModelSelectionMenu { modelCompletionCalled = true }.isEmpty)
+        #expect(view.onRichEditorBuildAlternativeModelMenu().isEmpty)
+        #expect(view.onRichEditorBuildAlternativeToolsMenu(isEnabled: true) { _ in
+            toolReloadCalled = true
+        }.isEmpty)
+        #expect(!view.onRichEditorCheckIfModelSupportsToolCall("unused"))
+        #expect(!modelCompletionCalled)
+        #expect(!toolReloadCalled)
+
+        #expect(view.title.buildMenu() == nil)
+        #expect(view.title.menuButton.isHidden)
+
+        let cell = ConversationSelectionView.Cell(style: .default, reuseIdentifier: nil)
+        cell.use(conversation, allowsLegacyConversations: false)
+        let interaction = UIContextMenuInteraction(delegate: cell)
+        #expect(cell.contextMenuInteraction(
+            interaction,
+            configurationForMenuAtLocation: .zero
+        ) == nil)
+
+        #expect(ConversationManager.shared.menu(
+            forConversation: conversation.id,
+            view: view,
+            allowsLegacyConversations: false
+        ) == nil)
+    }
+
+    @Test
+    @MainActor
+    func `production surface refuses unbound editor and provider actions`() async throws {
+        try await FlowDownTestContext.shared.ensureBootstrappedEnvironment()
+        let view = ChatView(allowsLegacyConversations: false)
+        let unboundConversationID = "unbound-\(UUID().uuidString)"
+
+        view.use(conversation: unboundConversationID)
+
+        #expect(view.conversationIdentifier == nil)
+        #expect(!view.jonworkUnavailableView.isHidden)
+        #expect(view.editor.isHidden)
+        #expect(!view.editor.isUserInteractionEnabled)
+        #expect(view.onRichEditorRequestCurrentModelIdentifier() == nil)
+        #expect(view.onRichEditorBuildModelSelectionMenu {}.isEmpty)
+        #expect(view.onRichEditorBuildAlternativeModelMenu().isEmpty)
+        #expect(view.onRichEditorBuildAlternativeToolsMenu(isEnabled: true) { _ in }.isEmpty)
+
+        var accepted: Bool?
+        view.onRichEditorSubmit(object: .init(text: "must not send")) {
+            accepted = $0
+        }
+        #expect(accepted == false)
+    }
+
+    @Test
+    @MainActor
+    func `Jonwork conversation hides legacy provider and attachment controls`() {
+        let editor = RichEditorView()
+
+        editor.setJonworkConversation(true)
+
+        #expect(editor.quickSettingBar.isOpen == false)
+        #expect(editor.inputEditor.bossButton.isHidden)
+        #expect(editor.inputEditor.moreButton.isHidden)
+        #expect(editor.quickSettingBar.browsingToggle.isOn == false)
+        #expect(editor.quickSettingBar.toolsToggle.isOn == false)
+
+        editor.setJonworkConversation(false)
+
+        #expect(editor.quickSettingBar.isOpen)
+        #expect(!editor.inputEditor.bossButton.isHidden)
+        #expect(!editor.inputEditor.moreButton.isHidden)
+    }
+
+    @Test
+    @MainActor
+    func `streaming controller gets a direct stop action`() {
+        let statusView = PiSessionStatusView()
+        var state = PiConversationState()
+        state.role = .controller
+        state.isStreaming = true
+
+        statusView.update(.init(conversation: state, connection: .connected))
+
+        #expect(!statusView.stopButton.isHidden)
+        #expect(statusView.stopButton.accessibilityLabel == String(localized: "Stop Response"))
+
+        state.role = .viewer
+        statusView.update(.init(conversation: state, connection: .connected))
+        #expect(statusView.stopButton.isHidden)
+    }
+
+    @Test
+    @MainActor
+    func `offline connection error is exposed to VoiceOver`() {
+        let statusView = PiSessionStatusView()
+        let error = "The connection was interrupted."
+
+        statusView.update(.init(conversation: .init(), connection: .offline(error)))
+
+        #expect(!statusView.isAccessibilityElement)
+        #expect(statusView.statusLabel.isAccessibilityElement)
+        #expect(statusView.statusLabel.accessibilityLabel == String(localized: "Jonwork · Offline"))
+        #expect(statusView.statusLabel.accessibilityValue == error)
+        #expect(statusView.actionButton.isAccessibilityElement)
+        #expect(statusView.stopButton.isAccessibilityElement)
+    }
+
+    @Test
     @MainActor
     func `create-session result binds the same client and server identity`() async throws {
-        let service = ProductionPiServiceSpy(snapshot: makeSnapshot(text: "ready"))
+        let service = ProductionPiServiceSpy(snapshot: makeSnapshot(text: "ready", sessionID: "created-session"))
         let defaults = makeDefaults()
         defer { defaults.removePersistentDomain(forName: defaultsSuite) }
         let baseURL = try #require(URL(string: "https://pi.example.test"))
@@ -26,7 +206,7 @@ struct PiProductionCompositionTests {
         let created = try await PiCreatedSession.create(
             service: service,
             repository: "/repo",
-            resumePath: "/resume.jsonl",
+            resumeSessionID: nil,
             clientID: "created-client",
             baseURL: baseURL
         )
@@ -50,7 +230,7 @@ struct PiProductionCompositionTests {
         ConversationManager.shared.scanAll()
         let session = ConversationSessionManager.shared.session(for: conversation.id)
         let stream = ProductionEventStream()
-        let service = ProductionPiServiceSpy(snapshot: makeSnapshot(text: "one"), stream: stream.stream)
+        let service = ProductionPiServiceSpy(snapshot: makeSnapshot(text: ""), stream: stream.stream)
         let defaults = makeDefaults()
         let baseURL = try #require(URL(string: "https://pi.example.test"))
         let coordinator = PiSessionCoordinator(
@@ -75,17 +255,34 @@ struct PiProductionCompositionTests {
             clientID: "client",
             baseURL: baseURL
         )
+        try await waitUntil { service.eventClientIDs == ["client"] }
+        stream.yield(productionEvent(
+            id: 1,
+            type: "operation.accepted",
+            data: ["operationId": "operation", "command": "prompt", "retryOfOperationId": NSNull()]
+        ))
+        stream.yield(productionEvent(
+            id: 2,
+            type: "turn.started",
+            data: ["operationId": "operation", "turnId": "turn"]
+        ))
+        stream.yield(productionEvent(
+            id: 3,
+            type: "assistant.message.started",
+            data: ["operationId": "operation", "turnId": "turn", "messageId": "message"]
+        ))
+        stream.yield(assistantTextDelta(id: 4, text: "one"))
         try await waitUntil { session.messages.contains { $0.document == "one" } }
         let originalID = try #require(session.messages.first { $0.document == "one" }?.objectId)
         emissions = 0
 
-        stream.yield(try agentMessageUpdate(text: "two"))
-        stream.yield(try agentMessageUpdate(text: "three"))
-        stream.yield(try agentMessageUpdate(text: "final"))
-        try await waitUntil { session.message(for: originalID)?.document == "final" }
+        stream.yield(assistantTextDelta(id: 5, text: "two"))
+        stream.yield(assistantTextDelta(id: 6, text: "three"))
+        stream.yield(assistantTextDelta(id: 7, text: "final"))
+        try await waitUntil { session.message(for: originalID)?.document == "onetwothreefinal" }
 
         #expect(session.messages.filter { $0.objectId == originalID }.count == 1)
-        #expect(session.messages.filter { $0.document == "final" }.count == 1)
+        #expect(session.messages.filter { $0.document == "onetwothreefinal" }.count == 1)
         #expect(emissions == 1)
         #expect(sdb.listMessages(within: conversation.id).allSatisfy { $0.objectId != originalID })
     }
@@ -170,71 +367,128 @@ struct PiProductionCompositionTests {
     private var defaultsSuite: String { "PiProductionCompositionTests" }
 }
 
-private func makeSnapshot(text: String) -> PiSessionState {
-    PiSessionState(
-        sessionId: "session",
-        cwd: "/repo",
-        sessionFile: nil,
-        sessionName: "Pi",
-        isStreaming: true,
-        model: nil,
-        thinkingLevel: "off",
-        steeringMode: .all,
-        followUpMode: .all,
-        stats: nil,
-        contextUsage: nil,
-        messages: [.object(["id": .string("message"), "role": .string("assistant"), "content": .string(text)])]
+private func makeSnapshot(text: String, sessionID: String = "session") -> PiGatewayWire.Snapshot {
+    PiGatewayWire.Snapshot(
+        contract: PiGatewayWire.contract,
+        sessionId: sessionID,
+        repositoryId: "/repo",
+        revision: 1,
+        lastEventId: "0",
+        runtime: .running,
+        run: .init(status: .idle, operationId: nil),
+        controller: .init(clientId: nil, leaseExpiresAt: nil),
+        configuration: .init(model: nil, thinkingLevel: .off),
+        messages: text.isEmpty ? [] : [.init(
+            id: "message",
+            role: .assistant,
+            status: .completed,
+            content: [.init(type: .text, text: text, toolCallId: nil, attachmentId: nil)]
+        )],
+        attachments: []
     )
 }
 
-private func agentMessageUpdate(text: String) throws -> PiServerEvent {
-    let data = Data(#"{"type":"message_update","message":{"id":"message","role":"assistant","content":"\#(text)"}}"#.utf8)
-    return .agent(try JSONDecoder().decode(PiAgentEvent.self, from: data))
+private func assistantTextDelta(id: Int, text: String) -> PiGatewayWire.Event {
+    productionEvent(
+        id: id,
+        type: "assistant.text.delta",
+        data: ["operationId": "operation", "turnId": "turn", "messageId": "message", "delta": text]
+    )
+}
+
+private func productionEvent(id: Int, type: String, data: [String: Any]) -> PiGatewayWire.Event {
+    let object: [String: Any] = [
+        "contract": PiGatewayWire.contract,
+        "id": String(id),
+        "sessionId": "session",
+        "sessionRevision": 1,
+        "occurredAt": "2026-10-13T08:00:00.000Z",
+        "type": type,
+        "data": data,
+    ]
+    let encoded = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    return try! JSONDecoder.piGateway.decode(PiGatewayWire.Event.self, from: encoded)
+}
+
+private func productionDiscovery() -> PiGatewayWire.Discovery {
+    .init(
+        contract: PiGatewayWire.contract,
+        apiVersion: "1.0",
+        authentication: .init(
+            type: "oauth2_authorization_code",
+            clientId: "pi-ios",
+            authorizationEndpoint: URL(string: "https://pi.example.test/authorize")!,
+            tokenEndpoint: URL(string: "https://pi.example.test/token")!,
+            revocationEndpoint: URL(string: "https://pi.example.test/revoke")!,
+            scopes: ["pi.gateway"],
+            pkceMethods: ["S256"],
+            accessTokenLifetimeSeconds: 900,
+            refreshTokenRotation: "required"
+        ),
+        capabilities: .init(
+            repositories: true, models: true, thinking: true, sessions: true, commands: true,
+            sse: true, authoritativeSnapshot: true, eventIds: true, replay: true, idempotency: true,
+            singleWriter: true, takeover: true, release: true, abort: true, retry: true,
+            attachments: .init(images: true, files: true)
+        ),
+        limits: .init(
+            readTimeoutMs: 1_000, mutationTimeoutMs: 1_000, sseConnectTimeoutMs: 1_000,
+            replayRetentionEvents: 100, replayRetentionSeconds: 100,
+            idempotencyRetentionSeconds: 86_400, attachmentMaxBytes: 1_000_000,
+            attachmentTotalBytes: 2_000_000, attachmentsPerPrompt: 4, attachmentUploadTimeoutMs: 1_000,
+            attachmentDownloadTimeoutMs: 1_000, attachmentMediaTypes: ["image/png", "application/octet-stream"],
+            attachmentDigestAlgorithm: "sha-256"
+        )
+    )
 }
 
 private final class ProductionEventStream: @unchecked Sendable {
-    let stream: AsyncThrowingStream<PiServerEvent, Error>
-    private let continuation: AsyncThrowingStream<PiServerEvent, Error>.Continuation
+    let stream: AsyncThrowingStream<PiGatewayWire.Event, Error>
+    private let continuation: AsyncThrowingStream<PiGatewayWire.Event, Error>.Continuation
 
     init() {
-        var continuation: AsyncThrowingStream<PiServerEvent, Error>.Continuation!
+        var continuation: AsyncThrowingStream<PiGatewayWire.Event, Error>.Continuation!
         stream = AsyncThrowingStream { continuation = $0 }
         self.continuation = continuation
     }
 
-    func yield(_ event: PiServerEvent) { continuation.yield(event) }
+    func yield(_ event: PiGatewayWire.Event) { continuation.yield(event) }
 }
 
 private final class ProductionPiServiceSpy: PiServiceProtocol, @unchecked Sendable {
     private let lock = NSLock()
-    private let snapshot: PiSessionState
-    private let stream: AsyncThrowingStream<PiServerEvent, Error>
+    private let snapshotValue: PiGatewayWire.Snapshot
+    private let stream: AsyncThrowingStream<PiGatewayWire.Event, Error>
     private var createdClients: [String] = []
     private var eventClients: [String] = []
 
-    init(snapshot: PiSessionState, stream: AsyncThrowingStream<PiServerEvent, Error> = AsyncThrowingStream { _ in }) {
-        self.snapshot = snapshot
+    init(snapshot: PiGatewayWire.Snapshot, stream: AsyncThrowingStream<PiGatewayWire.Event, Error> = AsyncThrowingStream { _ in }) {
+        snapshotValue = snapshot
         self.stream = stream
     }
 
     var createdClientIDs: [String] { lock.withLock { createdClients } }
     var eventClientIDs: [String] { lock.withLock { eventClients } }
-    func health() async throws {}
-    func listModels() async throws -> [PiModel] { [] }
-    func listRepositories() async throws -> [String] { [] }
-    func listSessions(repository _: String?) async throws -> [PiSessionSummary] { [] }
-    func createSession(repository _: String?, resumePath _: String?, clientID: String) async throws -> String {
+    func discover() async throws -> PiGatewayWire.Discovery { productionDiscovery() }
+    func listModels() async throws -> [PiGatewayWire.Model] { [] }
+    func createSession(
+        repositoryID _: String,
+        name _: String?,
+        clientID: String,
+        idempotencyKey _: String
+    ) async throws -> PiGatewayWire.Snapshot {
         lock.withLock { createdClients.append(clientID) }
-        return "created-session"
+        return snapshotValue
     }
-    func state(sessionID _: String) async throws -> PiSessionState { snapshot }
-    func events(sessionID _: String, clientID: String) -> AsyncThrowingStream<PiServerEvent, Error> {
+    func snapshot(sessionID _: String) async throws -> PiGatewayWire.Snapshot { snapshotValue }
+    func events(
+        sessionID _: String,
+        clientID: String,
+        afterEventID _: String
+    ) -> AsyncThrowingStream<PiGatewayWire.Event, Error> {
         lock.withLock { eventClients.append(clientID) }
         return stream
     }
-    func send(_: PiCommand, sessionID _: String) async throws {}
-    func takeOver(sessionID _: String, clientID _: String) async throws {}
-    func release(sessionID _: String, clientID _: String) async throws {}
 }
 
 private enum ProductionPiTestError: Error { case timedOut }

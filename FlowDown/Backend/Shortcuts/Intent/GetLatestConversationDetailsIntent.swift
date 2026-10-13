@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import Foundation
 
@@ -27,3 +28,4 @@ struct GetLatestConversationDetailsIntent: AppIntent {
         return .result(value: transcript, dialog: dialog)
     }
 }
+#endif

@@ -10,19 +10,19 @@ import ConfigurableKit
 import GlyphixTextFx
 import UIKit
 
-private let defaultBrandingValue = "FlowDown"
+private let defaultBrandingValue = "Jonwork"
 
 class BrandingLabel: GlyphixTextLabel {
     static let configurableObject = ConfigurableObject(
         icon: "pencil",
         title: "Edit Branding Name",
-        explain: "Change the branding name display in the app. Leave it empty to use FlowDown.",
+        explain: "Change the branding name display in the app. Leave it empty to use Jonwork.",
         key: "BrandingLabel.Text",
         defaultValue: "\(defaultBrandingValue)",
         annotation: .action { controller in
             let alert = AlertInputViewController(
                 title: "Edit Branding Name",
-                message: "Change the branding name display in the app. Leave it empty to use FlowDown.",
+                message: "Change the branding name display in the app. Leave it empty to use Jonwork.",
                 placeholder: "\(defaultBrandingValue)",
                 text: BrandingLabel.readBrandingValue(),
                 cancelButtonText: "Cancel",
@@ -40,10 +40,14 @@ class BrandingLabel: GlyphixTextLabel {
     }
 
     static func readBrandingValue() -> String {
+        #if !DEBUG
+            return defaultBrandingValue
+        #else
         if let value = UserDefaults.standard.string(forKey: BrandingLabel.configurableObject.key),
            !value.isEmpty
         { return value }
         return defaultBrandingValue
+        #endif
     }
 
     init() {

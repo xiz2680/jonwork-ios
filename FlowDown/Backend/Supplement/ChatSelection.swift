@@ -59,15 +59,18 @@ class ChatSelection {
             .delay(for: .milliseconds(1), scheduler: DispatchQueue.main)
             .eraseToAnyPublisher()
 
-        let conversations = sdb.conversationList()
-        if let firstConversation = conversations.first {
-            subject.send(.conversation(id: firstConversation.id))
-        } else {
-            let initialConversation = ConversationManager.shared.createNewConversation(autoSelect: false)
-            subject.send(.conversation(id: initialConversation.id))
-        }
+        #if DEBUG
+            let conversations = sdb.conversationList()
+            if let firstConversation = conversations.first {
+                subject.send(.conversation(id: firstConversation.id))
+            } else {
+                let initialConversation = ConversationManager.shared.createNewConversation(autoSelect: false)
+                subject.send(.conversation(id: initialConversation.id))
+            }
+        #endif
 
         // Listen for conversation list changes and auto-create conversation if list becomes empty
+        #if DEBUG
         ConversationManager.shared.conversations
             .receive(on: DispatchQueue.main)
             .sink { [weak self] conversationDict in
@@ -82,6 +85,7 @@ class ChatSelection {
                 subject.send(.conversation(id: newConversation.id))
             }
             .store(in: &cancellables)
+        #endif
     }
 
     func select(_ selection: Selection) {

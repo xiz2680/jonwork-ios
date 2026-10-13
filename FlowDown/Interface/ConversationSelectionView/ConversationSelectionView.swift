@@ -21,6 +21,7 @@ private class GroundedTableView: UITableView {
 }
 
 class ConversationSelectionView: UIView {
+    let allowsLegacyConversations: Bool
     let tableView: UITableView
     let dataSource: DataSource
 
@@ -32,7 +33,8 @@ class ConversationSelectionView: UIView {
     typealias DataSource = UITableViewDiffableDataSource<SectionIdentifier, DataIdentifier>
     typealias Snapshot = NSDiffableDataSourceSnapshot<SectionIdentifier, DataIdentifier>
 
-    init() {
+    init(allowsLegacyConversations: Bool = JonworkSurfacePolicy.allowsLegacyConversations) {
+        self.allowsLegacyConversations = allowsLegacyConversations
         tableView = GroundedTableView(frame: .zero, style: .plain)
         tableView.register(Cell.self, forCellReuseIdentifier: "Cell")
 
@@ -40,7 +42,7 @@ class ConversationSelectionView: UIView {
             tableView.separatorColor = .clear
             let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath) as! Cell
             let conv = ConversationManager.shared.conversation(identifier: itemIdentifier)
-            cell.use(conv)
+            cell.use(conv, allowsLegacyConversations: allowsLegacyConversations)
             return cell
         }
         dataSource.defaultRowAnimation = .fade
@@ -127,7 +129,14 @@ class ConversationSelectionView: UIView {
     func updateDataSource() {
         let list = ConversationManager.shared.conversations.value.values
         guard !list.isEmpty else {
-            _ = ConversationManager.shared.initialConversation()
+            if JonworkSurfacePolicy.shouldCreateInitialConversation(
+                isConversationListEmpty: true,
+                allowsLegacyConversations: allowsLegacyConversations
+            ) {
+                _ = ConversationManager.shared.initialConversation()
+            } else {
+                dataSource.apply(Snapshot(), animatingDifferences: true)
+            }
             return
         }
 

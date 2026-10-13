@@ -12,10 +12,10 @@
 
 #include "Version.xcconfig"
 
-DEVELOPMENT_TEAM = 964G86XT2P;
-PRODUCT_BUNDLE_IDENTIFIER = wiki.qaq.flow;
-
-CLOUDKIT_SYNC_CONTAINER_IDENTIFIER = iCloud.$(PRODUCT_BUNDLE_IDENTIFIER).sync;
+// Configure the Apple Developer team in a local or CI override.
+DEVELOPMENT_TEAM =;
+PRODUCT_BUNDLE_IDENTIFIER = com.jonwork.ios;
+CLOUDKIT_SYNC_CONTAINER_IDENTIFIER =;
 
 CODE_SIGN_STYLE = Automatic;
 CODE_SIGN_IDENTITY = Apple Development;

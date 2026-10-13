@@ -17,10 +17,16 @@ private let dateFormatter = DateFormatter().with {
 }
 
 extension ConversationManager {
+    @MainActor
     func menu(
         forConversation identifier: Conversation.ID?,
         view: UIView,
+        allowsLegacyConversations: Bool = JonworkSurfacePolicy.allowsLegacyConversations
     ) -> UIMenu? {
+        guard JonworkSurfacePolicy.permitsLegacyConversationActions(
+            hasJonworkBinding: PiSessionCoordinator.shared.binding(for: identifier) != nil,
+            allowsLegacyConversations: allowsLegacyConversations
+        ) else { return nil }
         guard let controller = view.parentViewController else { return nil }
         guard let conv = conversation(identifier: identifier) else { return nil }
 

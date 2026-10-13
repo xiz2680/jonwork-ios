@@ -16,62 +16,31 @@ extension SettingController {
             .init(name: "xmark", distinctStyle: .border, inset: 8)
         }
 
-        nonisolated(unsafe) let objects: [ConfigurableObject] = [
-            .init(
-                icon: "network",
-                title: "Pi Server",
-                explain: "Connect to Pi, choose a repository, and resume agent sessions.",
-                ephemeralAnnotation: .page { PiServerController() },
-            ),
-            .init(
-                icon: "gear",
-                title: "General",
-                explain: "Change the behavior of the application, adjust text sizes, tuning editor behavior.",
-                ephemeralAnnotation: .page { GeneralController() },
-            ),
-            .init(
-                icon: "bolt",
-                title: "Inference",
-                explain: "Configure global prompt, adjust parameters when inferencing.",
-                ephemeralAnnotation: .page { InferenceController() },
-            ),
-            .init(
-                icon: "doc.text.magnifyingglass",
-                title: "Model",
-                explain: "Manage language model providers or download local models.",
-                ephemeralAnnotation: .page { ModelController() },
-            ),
-            .init(
-                icon: "hammer",
-                title: "Tools",
-                explain: "Configure tool settings, choose search engine for internet searches, adding custom tools.",
-                ephemeralAnnotation: .page { ToolsController() },
-            ),
-            .init(
-                icon: "moon.stars",
-                title: "Memory",
-                explain: "Manage AI memory tools and stored conversation memories.",
-                ephemeralAnnotation: .page { MemoryController() },
-            ),
-            .init(
-                icon: "lock.shield",
-                title: "Data",
-                explain: "Get control of your data, configure cloud sync, export database or reset the app.",
-                ephemeralAnnotation: .page { DataControlController() },
-            ),
-            .init(
-                icon: "key",
-                title: "Permission",
-                explain: "Manage permissions for the application. Your privacy is important to us.",
-                ephemeralAnnotation: .page { PermissionController() },
-            ),
-            .init(
-                icon: "envelope",
-                title: "Support",
-                explain: "Have any questions or just wanna keep in touch? Contact us.",
-                ephemeralAnnotation: .page { SupportController() },
-            ),
-        ]
+        nonisolated(unsafe) let objects: [ConfigurableObject] = {
+            var objects: [ConfigurableObject] = [
+                .init(
+                    icon: "gear",
+                    title: "General",
+                    explain: "Adjust the conversation appearance and editor behavior.",
+                    ephemeralAnnotation: .page { GeneralController() },
+                ),
+                .init(
+                    icon: "envelope",
+                    title: "Support",
+                    explain: "Get help or contact the Jonwork team.",
+                    ephemeralAnnotation: .page { SupportController() },
+                ),
+            ]
+            #if DEBUG
+                objects.insert(.init(
+                    icon: "network",
+                    title: "Developer Connection",
+                    explain: "Connect to a development gateway and inspect agent sessions.",
+                    ephemeralAnnotation: .page { PiServerController() },
+                ), at: 0)
+            #endif
+            return objects
+        }()
 
         init() {
             super.init(nibName: nil, bundle: nil)
@@ -230,7 +199,7 @@ extension SettingController.SettingContent {
         }
 
         let descriptionLabel = UILabel().with {
-            $0.text = String(localized: "Change application behavior, manage language model providers, and get control of your data.")
+            $0.text = String(localized: "Personalize your Jonwork conversation experience.")
             $0.numberOfLines = 0
             $0.textAlignment = .center
             $0.font = .preferredFont(forTextStyle: .body)

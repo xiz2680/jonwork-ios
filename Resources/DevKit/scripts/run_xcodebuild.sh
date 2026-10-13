@@ -73,6 +73,11 @@ if [ "$XC_STATUS" -ne 0 ] || [ "$FOUND_ERRORS" -ne 0 ]; then
         echo "---------------------------------------" >&2
     fi
     if [ "$XC_STATUS" -ne 0 ]; then
+        echo "---- last 80 lines from log ----" >&2
+        tail -80 "$LOG" >&2 || true
+        echo "--------------------------------" >&2
+    fi
+    if [ "$XC_STATUS" -ne 0 ]; then
         exit "$XC_STATUS"
     fi
     exit 1

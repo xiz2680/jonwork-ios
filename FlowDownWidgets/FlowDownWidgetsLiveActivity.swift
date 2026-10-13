@@ -24,7 +24,7 @@ struct FlowDownWidgetsLiveActivity: Widget {
                         .bold()
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .center, spacing: 4) {
-                            Text(String("FlowDown"))
+                            Text(String("Jonwork"))
                                 .bold()
                             Spacer()
                             Group {
@@ -49,7 +49,7 @@ struct FlowDownWidgetsLiveActivity: Widget {
             .animation(.interactiveSpring, value: context.state)
             .activityBackgroundTint(.accent)
             .activitySystemActionForegroundColor(.white)
-            .widgetURL(URL(string: "flowdown://live-activity"))
+            .widgetURL(URL(string: "jonwork://live-activity"))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.bottom) {
@@ -99,7 +99,7 @@ struct FlowDownWidgetsLiveActivity: Widget {
                 Image(systemName: "bird.fill")
                     .foregroundStyle(finished ? .accent : .white)
                     .animation(.interactiveSpring, value: context.state)
-                    .widgetURL(URL(string: "flowdown://live-activity"))
+                    .widgetURL(URL(string: "jonwork://live-activity"))
             }
         }
     }

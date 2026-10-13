@@ -17,17 +17,38 @@ import UIKit
 
 extension MCPService {
     func callTool(name: String, arguments: [String: Value]? = nil, from clientName: String) async throws -> (content: [Tool.Content], isError: Bool?) {
+        guard allowsLegacyNetworking else {
+            disconnectAllLegacyConnections()
+            throw MCPError.serverDisabled
+        }
         guard let connection = connections[clientName], connection.hasClient else {
             throw MCPError.connectionFailed
         }
 
-        return try await connection.callTool(name: name, arguments: arguments)
+        do {
+            let result = try await connection.callTool(name: name, arguments: arguments)
+            guard allowsLegacyNetworking else {
+                discardLegacyConnection(connection, serverID: clientName)
+                throw MCPError.serverDisabled
+            }
+            return result
+        } catch {
+            if !allowsLegacyNetworking {
+                discardLegacyConnection(connection, serverID: clientName)
+                throw MCPError.serverDisabled
+            }
+            throw error
+        }
     }
 
     func getAllTools() async -> [MCPToolInfo] {
+        guard allowsLegacyNetworking else {
+            disconnectAllLegacyConnections()
+            return []
+        }
         var allTools: [MCPToolInfo] = []
 
-        for (serverID, connection) in connections {
+        for (serverID, connection) in Array(connections) {
             do {
                 guard let server = server(with: serverID),
                       server.isEnabled,
@@ -40,8 +61,18 @@ extension MCPService {
                     serverID: serverID,
                     serverName: name,
                 )
+                guard allowsLegacyNetworking else {
+                    discardLegacyConnection(connection, serverID: serverID)
+                    disconnectAllLegacyConnections()
+                    return []
+                }
                 allTools.append(contentsOf: toolInfos)
             } catch {
+                if !allowsLegacyNetworking {
+                    discardLegacyConnection(connection, serverID: serverID)
+                    disconnectAllLegacyConnections()
+                    return []
+                }
                 Logger.network.errorFile("failed to acquire tools from \(serverID): \(error.localizedDescription)")
             }
         }

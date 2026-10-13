@@ -59,6 +59,15 @@ class InputEditor: EditorSectionView {
     override func initializeViews() {
         super.initializeViews()
 
+        #if targetEnvironment(macCatalyst)
+            bossButton.accessibilityLabel = String(localized: "Add Attachment")
+        #else
+            bossButton.accessibilityLabel = String(localized: "Open Camera")
+        #endif
+        voiceButton.accessibilityLabel = String(localized: "Voice Input")
+        moreButton.accessibilityLabel = String(localized: "More Options")
+        sendButton.accessibilityLabel = String(localized: "Send")
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(updateReturnKeyType),

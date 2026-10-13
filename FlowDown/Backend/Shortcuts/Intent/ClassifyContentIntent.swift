@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import Foundation
 
@@ -312,3 +313,4 @@ private extension String {
         return String(self[valueRange])
     }
 }
+#endif

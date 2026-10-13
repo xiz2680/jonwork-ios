@@ -12,7 +12,55 @@ import SnapKit
 import Storage
 import UIKit
 
+final class JonworkUnavailableView: UIView {
+    let titleLabel = UILabel().with {
+        $0.text = String(localized: "Conversations Unavailable")
+        $0.font = .preferredFont(forTextStyle: .title2).bold
+        $0.adjustsFontForContentSizeCategory = true
+        $0.textAlignment = .center
+        $0.textColor = .label
+        $0.numberOfLines = 0
+    }
+
+    let detailLabel = UILabel().with {
+        $0.text = String(localized: "Jonwork sign-in is not available in this build. No local conversation was created.")
+        $0.font = .preferredFont(forTextStyle: .body)
+        $0.adjustsFontForContentSizeCategory = true
+        $0.textAlignment = .center
+        $0.textColor = .secondaryLabel
+        $0.numberOfLines = 0
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        accessibilityIdentifier = "JonworkUnavailableView"
+
+        let icon = UIImageView(image: UIImage(systemName: "person.crop.circle.badge.exclamationmark"))
+        icon.tintColor = .secondaryLabel
+        icon.contentMode = .scaleAspectFit
+
+        let stack = UIStackView(arrangedSubviews: [icon, titleLabel, detailLabel])
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 12
+        addSubview(stack)
+        stack.snp.makeConstraints { make in
+            make.center.equalToSuperview()
+            make.left.right.equalToSuperview().inset(32)
+        }
+        icon.snp.makeConstraints { make in
+            make.width.height.equalTo(44)
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError()
+    }
+}
+
 class ChatView: UIView {
+    private let allowsLegacyConversations: Bool
     var conversationIdentifier: Conversation.ID?
     var cancellables: Set<AnyCancellable> = .init()
 
@@ -65,17 +113,21 @@ class ChatView: UIView {
     @TypedStorage(key: "Chat.Editor.Model.Apply.Default", defaultValue: true)
     var editorApplyModelToDefault: Bool
 
-    let title = TitleBar()
+    let title: TitleBar
     let piStatusView = PiSessionStatusView()
+    let jonworkUnavailableView = JonworkUnavailableView()
 
     var onCreateNewChat: (() -> Void)?
     var onSuggestNewChat: ((Conversation.ID) -> Void)?
 
-    init() {
+    init(allowsLegacyConversations: Bool = JonworkSurfacePolicy.allowsLegacyConversations) {
+        self.allowsLegacyConversations = allowsLegacyConversations
+        title = TitleBar(allowsLegacyConversations: allowsLegacyConversations)
         super.init(frame: .zero)
 
         addSubview(editorBackgroundView)
         addSubview(editor)
+        addSubview(jonworkUnavailableView)
 
         #if !targetEnvironment(macCatalyst)
             let escapeButtonGlass = escapeButton.wrappedInGlassEffect(cornerStyle: .capsule)
@@ -84,6 +136,10 @@ class ChatView: UIView {
 
         addSubview(title)
         addSubview(piStatusView)
+
+        jonworkUnavailableView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
 
         #if !targetEnvironment(macCatalyst)
             bringSubviewToFront(escapeButtonGlass)
@@ -94,6 +150,10 @@ class ChatView: UIView {
             make.centerX.equalToSuperview()
             make.width.lessThanOrEqualToSuperview().inset(64)
             make.height.greaterThanOrEqualTo(44)
+        }
+        piStatusView.onStop = { [weak self] in
+            guard let self, let conversationIdentifier else { return }
+            Task { await self.performPiAction { try await PiSessionCoordinator.shared.abort(conversationID: conversationIdentifier) } }
         }
 
         editor.handlerColor = handlerColor
@@ -217,6 +277,12 @@ class ChatView: UIView {
                 updatePiPresentation()
             }
             .store(in: &cancellables)
+
+        if allowsLegacyConversations {
+            showConversationSurface()
+        } else {
+            showJonworkUnavailable()
+        }
     }
 
     @available(*, unavailable)
@@ -225,6 +291,7 @@ class ChatView: UIView {
     }
 
     func focusEditor() {
+        guard permitsConversation(conversationIdentifier) else { return }
         editor.focus()
     }
 
@@ -233,6 +300,9 @@ class ChatView: UIView {
         currentMessageListView?.removeFromSuperview()
         conversationIdentifier = nil
         editor.prepareForReuse()
+        if !allowsLegacyConversations {
+            showJonworkUnavailable()
+        }
     }
 
     func setupTitleLayout(_ height: CGFloat? = nil) {
@@ -245,10 +315,19 @@ class ChatView: UIView {
     }
 
     func use(conversation: Conversation.ID, completion: (() -> Void)? = nil) {
+        guard JonworkSurfacePolicy.permitsConversation(
+            hasJonworkBinding: PiSessionCoordinator.shared.binding(for: conversation) != nil,
+            allowsLegacyConversations: allowsLegacyConversations
+        ) else {
+            showJonworkUnavailable()
+            completion?()
+            return
+        }
         if conversationIdentifier == conversation {
             completion?()
             return
         }
+        showConversationSurface()
         conversationIdentifier = conversation
 
         // dont do it here, stream may still alive
@@ -277,7 +356,9 @@ class ChatView: UIView {
         editor.setProcessingMode(isExecuting)
         updateCurrentMessageListInsets()
 
-        offloadModelsToSession(modelIdentifier: modelIdentifier())
+        if PiSessionCoordinator.shared.binding(for: conversation) == nil {
+            offloadModelsToSession(modelIdentifier: modelIdentifier())
+        }
         removeUnusedListViews()
         Task { @MainActor in
             completion?()
@@ -312,11 +393,24 @@ class ChatView: UIView {
         guard let conversationIdentifier,
               PiSessionCoordinator.shared.binding(for: conversationIdentifier) != nil
         else {
-            piStatusView.isHidden = true
-            editor.isUserInteractionEnabled = true
-            setNeedsLayout()
+            #if DEBUG
+                piStatusView.isHidden = true
+                editor.setJonworkConversation(false)
+                editor.isUserInteractionEnabled = true
+                setNeedsLayout()
+            #else
+                showJonworkUnavailable()
+            #endif
             return
         }
+
+            editor.setJonworkConversation(
+                true,
+                attachmentsEnabled: PiSessionCoordinator.shared.canAttach(conversationID: conversationIdentifier),
+                attachmentMaximumBytes: PiSessionCoordinator.shared.attachmentMaximumBytes(
+                    conversationID: conversationIdentifier
+                )
+            )
 
         if let viewState = PiSessionCoordinator.shared.viewState(for: conversationIdentifier) {
             piStatusView.update(viewState)
@@ -333,10 +427,39 @@ class ChatView: UIView {
         setNeedsLayout()
     }
 
+    func permitsConversation(_ conversationID: Conversation.ID?) -> Bool {
+        JonworkSurfacePolicy.permitsConversation(
+            hasJonworkBinding: PiSessionCoordinator.shared.binding(for: conversationID) != nil,
+            allowsLegacyConversations: allowsLegacyConversations
+        )
+    }
+
+    private func showConversationSurface() {
+        jonworkUnavailableView.isHidden = true
+        title.isHidden = false
+        editor.isHidden = false
+        editorBackgroundView.isHidden = false
+    }
+
+    private func showJonworkUnavailable() {
+        endEditing(true)
+        for listView in messageListViews.values {
+            listView.isHidden = true
+        }
+        conversationIdentifier = nil
+        title.isHidden = true
+        piStatusView.isHidden = true
+        editor.isUserInteractionEnabled = false
+        editor.isHidden = true
+        editorBackgroundView.isHidden = true
+        jonworkUnavailableView.isHidden = false
+        setNeedsLayout()
+    }
+
     private func buildPiSessionMenu(viewState: PiSessionCoordinator.ViewState) -> UIMenu {
         guard let conversationIdentifier else { return UIMenu() }
         if viewState.connection != .connected {
-            return UIMenu(title: String(localized: "Pi Session"), children: [
+            return UIMenu(title: String(localized: "Conversation"), children: [
                 UIAction(
                     title: String(localized: "Retry"),
                     image: UIImage(systemName: "arrow.clockwise")
@@ -357,23 +480,31 @@ class ChatView: UIView {
                 Task { await self?.performPiAction { try await PiSessionCoordinator.shared.abort(conversationID: conversationIdentifier) } }
             })
         }
+        if state.role == .controller, !state.isStreaming, state.lastFailedOperationID != nil {
+            actions.append(UIAction(
+                title: String(localized: "Retry Failed Response"),
+                image: UIImage(systemName: "arrow.clockwise")
+            ) { [weak self] _ in
+                Task { await self?.performPiAction { try await PiSessionCoordinator.shared.retry(conversationID: conversationIdentifier) } }
+            })
+        }
         if state.role == .viewer, !state.isStreaming {
             actions.append(UIAction(
-                title: String(localized: "Take Control"),
+                title: String(localized: "Edit on This Device"),
                 image: UIImage(systemName: "hand.raised")
             ) { [weak self] _ in
                 Task { await self?.performPiAction { try await PiSessionCoordinator.shared.takeOver(conversationID: conversationIdentifier) } }
             })
         } else if state.role == .viewer, state.isStreaming {
             actions.append(UIAction(
-                title: String(localized: "Take Control is unavailable while Pi is working."),
+                title: String(localized: "Editing is unavailable while Jonwork is working."),
                 image: UIImage(systemName: "hand.raised"),
                 attributes: .disabled
             ) { _ in })
         }
         if state.role == .controller, !state.isReleased {
             actions.append(UIAction(
-                title: String(localized: "Release to Pi CLI"),
+                title: String(localized: "Continue on Desktop"),
                 image: UIImage(systemName: "terminal"),
                 attributes: .destructive
             ) { [weak self] _ in
@@ -386,17 +517,17 @@ class ChatView: UIView {
                 attributes: .disabled
             ) { _ in })
         }
-        return UIMenu(title: String(localized: "Pi Session"), children: actions)
+        return UIMenu(title: String(localized: "Conversation"), children: actions)
     }
 
     private func confirmPiRelease(conversationID: Conversation.ID) {
         let alert = UIAlertController(
-            title: String(localized: "Release to Pi CLI?"),
-            message: String(localized: "The mobile runtime will close. Your durable session stays available in the Pi CLI."),
+            title: String(localized: "Continue on Desktop?"),
+            message: String(localized: "Jonwork will stop editing on this device and keep the conversation available on your desktop."),
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
-        alert.addAction(UIAlertAction(title: String(localized: "Release"), style: .destructive) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Continue"), style: .destructive) { [weak self] _ in
             Task { await self?.performPiAction { try await PiSessionCoordinator.shared.release(conversationID: conversationID) } }
         })
         parentViewController?.present(alert, animated: true)
@@ -423,6 +554,7 @@ class ChatView: UIView {
 
 extension ChatView {
     class TitleBar: UIView {
+        private let allowsLegacyConversations: Bool
         let textLabel: GlyphixTextLabel = .init().with {
             $0.font = .preferredFont(forTextStyle: .body).bold
             $0.isBlurEffectEnabled = false
@@ -462,7 +594,8 @@ extension ChatView {
         var onCreateNewChat: (() -> Void)?
         var onSuggestSelection: ((Conversation.ID) -> Void)?
 
-        init() {
+        init(allowsLegacyConversations: Bool = JonworkSurfacePolicy.allowsLegacyConversations) {
+            self.allowsLegacyConversations = allowsLegacyConversations
             super.init(frame: .zero)
             translatesAutoresizingMaskIntoConstraints = false
 
@@ -641,6 +774,10 @@ extension ChatView {
             conv = identifier
             let conversation = ConversationManager.shared.conversation(identifier: identifier)
             icon.image = conversation?.interfaceImage
+            menuButton.isHidden = !JonworkSurfacePolicy.permitsLegacyConversationActions(
+                hasJonworkBinding: PiSessionCoordinator.shared.binding(for: identifier) != nil,
+                allowsLegacyConversations: allowsLegacyConversations
+            )
             doWithAnimation {
                 self.textLabel.text = conversation?.title ?? String(localized: "Untitled")
             }
@@ -655,11 +792,16 @@ extension ChatView {
             }
         }
 
-        private func buildMenu() -> UIMenu? {
+        func buildMenu() -> UIMenu? {
             guard let conv else { return nil }
+            guard JonworkSurfacePolicy.permitsLegacyConversationActions(
+                hasJonworkBinding: PiSessionCoordinator.shared.binding(for: conv) != nil,
+                allowsLegacyConversations: allowsLegacyConversations
+            ) else { return nil }
             guard let convMenu = ConversationManager.shared.menu(
                 forConversation: conv,
                 view: self,
+                allowsLegacyConversations: allowsLegacyConversations
             ) else { return nil }
 
             #if targetEnvironment(macCatalyst)

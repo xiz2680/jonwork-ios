@@ -12,13 +12,20 @@ import RegexBuilder
 import ScrubberKit
 import Storage
 import UIKit
+import UniformTypeIdentifiers
 
 extension ChatView: RichEditorView.Delegate {
   func onRichEditorSubmit(object: RichEditorView.Object, completion: @escaping (Bool) -> Void) {
-    guard let conversationID = conversationIdentifier,
-      let currentMessageListView
-    else {
-      assertionFailure()
+    guard let conversationID = conversationIdentifier else {
+      completion(false)
+      return
+    }
+    guard permitsConversation(conversationID) else {
+      completion(false)
+      return
+    }
+    guard let currentMessageListView else {
+      completion(false)
       return
     }
 
@@ -142,19 +149,9 @@ extension ChatView: RichEditorView.Delegate {
     conversationID: Conversation.ID,
     completion: @escaping (Bool) -> Void
   ) {
-    guard object.attachments.isEmpty else {
-      Indicator.present(
-        title: "This Pi server does not support attachments yet.",
-        preset: .error,
-        referencingView: self
-      )
-      completion(false)
-      return
-    }
-
     guard let viewState = PiSessionCoordinator.shared.viewState(for: conversationID) else {
       Indicator.present(
-        title: "Pi is reconnecting. Try again in a moment.",
+        title: "Jonwork is reconnecting. Try again in a moment.",
         preset: .error,
         referencingView: self
       )
@@ -164,13 +161,13 @@ extension ChatView: RichEditorView.Delegate {
 
     if viewState.conversation.isStreaming {
       let chooser = UIAlertController(
-        title: String(localized: "Send while Pi is working"),
+        title: String(localized: "Send while Jonwork is working"),
         message: String(localized: "Choose whether to steer the current response or queue a follow-up."),
         preferredStyle: .actionSheet
       )
       chooser.addAction(UIAlertAction(title: String(localized: "Steer Current Response"), style: .default) { [weak self] _ in
         self?.performPiSend(
-          text: object.text,
+          object: object,
           delivery: .steer,
           conversationID: conversationID,
           completion: completion
@@ -178,7 +175,7 @@ extension ChatView: RichEditorView.Delegate {
       })
       chooser.addAction(UIAlertAction(title: String(localized: "Queue Follow-up"), style: .default) { [weak self] _ in
         self?.performPiSend(
-          text: object.text,
+          object: object,
           delivery: .followUp,
           conversationID: conversationID,
           completion: completion
@@ -197,8 +194,8 @@ extension ChatView: RichEditorView.Delegate {
       parentViewController?.present(chooser, animated: true)
     } else {
       performPiSend(
-        text: object.text,
-        delivery: nil,
+        object: object,
+        delivery: .prompt,
         conversationID: conversationID,
         completion: completion
       )
@@ -206,29 +203,72 @@ extension ChatView: RichEditorView.Delegate {
   }
 
   private func performPiSend(
-    text: String,
-    delivery: PiCommand.Delivery?,
+    object: RichEditorView.Object,
+    delivery: PiConversationAction.Delivery,
     conversationID: Conversation.ID,
     completion: @escaping (Bool) -> Void
   ) {
     Task { @MainActor [weak self] in
+      guard let self else {
+        completion(false)
+        return
+      }
       do {
+        let attachments = try await self.makePiAttachments(object)
         try await PiSessionCoordinator.shared.send(
-          text: text,
+          text: object.text,
+          attachments: attachments,
           delivery: delivery,
           conversationID: conversationID
         )
         completion(true)
       } catch {
-        guard let self else {
-          completion(false)
-          return
-        }
         let errorKey: String.LocalizationValue = "\(error.localizedDescription)"
         Indicator.present(title: errorKey, preset: .error, referencingView: self)
         completion(false)
       }
     }
+  }
+
+  private func makePiAttachments(_ object: RichEditorView.Object) async throws -> [PiAttachmentUpload] {
+    let storageURL: URL? = if case let .some(.url(url)) = object.options[.storagePrefix] { url } else { nil }
+    return try object.attachments.map { attachment in
+      let kind: PiAttachmentUpload.Kind = attachment.type == .image ? .image : .file
+      guard let conversationIdentifier,
+            PiSessionCoordinator.shared.supportsAttachments(conversationID: conversationIdentifier, kind: kind)
+      else { throw PiCoordinatorError.capabilityUnavailable }
+      let fileURL = storageURL?.appendingPathComponent(attachment.storageSuffix)
+      if attachment.type == .image, !attachment.imageRepresentation.isEmpty {
+        return .init(
+          data: attachment.imageRepresentation,
+          fileName: attachment.name,
+          mediaType: mediaType(for: attachment),
+          kind: kind
+        )
+      } else if let fileURL, FileManager.default.fileExists(atPath: fileURL.path) {
+        return .init(
+          fileURL: fileURL,
+          fileName: attachment.name,
+          mediaType: mediaType(for: attachment),
+          kind: kind
+        )
+      } else if !attachment.textRepresentation.isEmpty {
+        return .init(
+          data: Data(attachment.textRepresentation.utf8),
+          fileName: attachment.name,
+          mediaType: mediaType(for: attachment),
+          kind: kind
+        )
+      } else {
+        throw PiServiceError.invalidResponse
+      }
+    }
+  }
+
+  private func mediaType(for attachment: RichEditorView.Object.Attachment) -> String {
+    let pathExtension = URL(fileURLWithPath: attachment.name).pathExtension
+    return UTType(filenameExtension: pathExtension)?.preferredMIMEType
+      ?? (attachment.type == .image ? "image/jpeg" : "application/octet-stream")
   }
 
   func onRichEditorError(_ error: String) {
@@ -245,16 +285,20 @@ extension ChatView: RichEditorView.Delegate {
 
   func onRichEditorRequestObjectForRestore() -> RichEditorView.Object? {
     guard let conversationIdentifier else { return nil }
+    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return nil }
     return ConversationManager.shared.getRichEditorObject(identifier: conversationIdentifier)
   }
 
   func onRichEditorUpdateObject(object: RichEditorView.Object) {
     guard let conversationIdentifier else { return }
+    guard permitsConversation(conversationIdentifier) else { return }
+    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return }
     ConversationManager.shared.setRichEditorObject(identifier: conversationIdentifier, object)
     offloadModelsToSession(modelIdentifier: modelIdentifier())
   }
 
   func modelIdentifier() -> String? {
+    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return nil }
     if let id = ConversationManager.shared.conversation(
       identifier: conversationIdentifier,
     )?.modelId {
@@ -264,6 +308,8 @@ extension ChatView: RichEditorView.Delegate {
   }
 
   func onRichEditorRequestCurrentModelName() -> String? {
+    guard permitsConversation(conversationIdentifier) else { return nil }
+    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return nil }
     guard let modelIdentifier = modelIdentifier() else { return nil }
     if #available(iOS 26.0, macCatalyst 26.0, *),
       modelIdentifier == AppleIntelligenceModel.shared.modelIdentifier
@@ -287,11 +333,15 @@ extension ChatView: RichEditorView.Delegate {
   }
 
   func onRichEditorRequestCurrentModelIdentifier() -> String? {
-    modelIdentifier()
+    guard permitsConversation(conversationIdentifier) else { return nil }
+    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return nil }
+    return modelIdentifier()
   }
 
   func onRichEditorBuildModelSelectionMenu(completion: @escaping () -> Void) -> [UIMenuElement] {
     guard let conversationIdentifier else { return [] }
+    guard permitsConversation(conversationIdentifier) else { return [] }
+    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return [] }
     let modelIdentifier = ConversationManager.shared.conversation(
       identifier: conversationIdentifier,
     )?.modelId
@@ -311,6 +361,8 @@ extension ChatView: RichEditorView.Delegate {
   }
 
   func onRichEditorBuildAlternativeModelMenu() -> [UIMenuElement] {
+    guard permitsConversation(conversationIdentifier) else { return [] }
+    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return [] }
     let isAppleIntelligence: Bool = {
       guard let id = modelIdentifier(), !id.isEmpty else { return false }
       if #available(iOS 26.0, macCatalyst 26.0, *) {
@@ -344,6 +396,8 @@ extension ChatView: RichEditorView.Delegate {
   func onRichEditorBuildAlternativeToolsMenu(
     isEnabled: Bool, requestReload: @escaping (Bool) -> Void
   ) -> [UIMenuElement] {
+    guard permitsConversation(conversationIdentifier) else { return [] }
+    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return [] }
     let mcpServers = MCPService.shared.servers.value
     var toolMenuItems: [UIMenuElement] = [
       UIAction(
@@ -473,7 +527,9 @@ extension ChatView: RichEditorView.Delegate {
   }
 
   func onRichEditorCheckIfModelSupportsToolCall(_ modelIdentifier: String) -> Bool {
-    ModelManager.shared.modelCapabilities(identifier: modelIdentifier).contains(.tool)
+    guard permitsConversation(conversationIdentifier) else { return false }
+    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return false }
+    return ModelManager.shared.modelCapabilities(identifier: modelIdentifier).contains(.tool)
   }
 
   func onSelectLocalModel(_ model: LocalModel) {
@@ -485,6 +541,7 @@ extension ChatView: RichEditorView.Delegate {
   }
 
   private func onSelectModel(model_id: String) {
+    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return }
     offloadModelsToSession(modelIdentifier: model_id)
   }
 
@@ -493,6 +550,9 @@ extension ChatView: RichEditorView.Delegate {
       assertionFailure()
       return
     }
+    guard JonworkSurfacePolicy.permitsLegacyProviderAccess(
+      hasJonworkBinding: PiSessionCoordinator.shared.binding(for: conversationIdentifier) != nil
+    ) else { return }
     let session = ConversationSessionManager.shared.session(for: conversationIdentifier)
 
     session.models.chat = modelIdentifier ?? .defaultModelForConversation

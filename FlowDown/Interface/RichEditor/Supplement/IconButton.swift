@@ -23,6 +23,8 @@ class IconButton: UIView {
         addGestureRecognizer(tap)
 
         isUserInteractionEnabled = true
+        isAccessibilityElement = true
+        accessibilityTraits = .button
     }
 
     @available(*, unavailable)
@@ -50,6 +52,13 @@ class IconButton: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         imageView.frame = bounds.insetBy(dx: 2, dy: 2)
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        guard !isHidden, alpha > 0, isUserInteractionEnabled else { return false }
+        let horizontalInset = max(0, (44 - bounds.width) / 2)
+        let verticalInset = max(0, (44 - bounds.height) / 2)
+        return bounds.insetBy(dx: -horizontalInset, dy: -verticalInset).contains(point)
     }
 
     @objc private func buttonAction() {

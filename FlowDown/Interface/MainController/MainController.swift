@@ -323,8 +323,12 @@ class MainController: UIViewController {
     }
 
     @objc func requestNewChat() {
-        let conv = ConversationManager.shared.createNewConversation()
-        sidebar.newChatDidCreated(conv.id)
+        #if DEBUG
+            let conv = ConversationManager.shared.createNewConversation()
+            sidebar.newChatDidCreated(conv.id)
+        #else
+            load(nil)
+        #endif
     }
 
     @objc func openSettings() {
@@ -336,6 +340,16 @@ class MainController: UIViewController {
 
         guard let currentConversationID = chatView.conversationIdentifier else {
             // showErrorAlert(title: "Error", message: "No conversation available to send message.")
+            return
+        }
+        guard JonworkSurfacePolicy.permitsConversation(
+            hasJonworkBinding: PiSessionCoordinator.shared.binding(for: currentConversationID) != nil
+        ) else {
+            Logger.app.errorFile("blocked message for an unbound legacy conversation")
+            return
+        }
+        guard PiSessionCoordinator.shared.binding(for: currentConversationID) == nil else {
+            Logger.app.errorFile("blocked legacy send path for a Jonwork conversation")
             return
         }
         Logger.app.debugFile("current conversation ID: \(currentConversationID)")

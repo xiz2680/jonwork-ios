@@ -22,7 +22,14 @@ struct PiServerProfileStore {
         guard let rawURL = defaults.string(forKey: baseURLKey),
               let baseURL = URL(string: rawURL)
         else { return nil }
-        return .init(baseURL: baseURL, token: try credentials.token(server: baseURL))
+        let oauthToken = try credentials.oauthTokens(server: baseURL)?.accessToken
+        let token: String?
+        if let oauthToken {
+            token = oauthToken
+        } else {
+            token = try credentials.token(server: baseURL)
+        }
+        return .init(baseURL: baseURL, token: token)
     }
 
     func save(baseURL: URL, token: String?) throws {
@@ -59,11 +66,20 @@ struct PiServerProfileStore {
 
     func hasSavedToken() throws -> Bool {
         guard let rawURL = defaults.string(forKey: baseURLKey), let baseURL = URL(string: rawURL) else { return false }
-        return try credentials.token(server: baseURL) != nil
+        return try credentials.oauthTokens(server: baseURL) != nil || credentials.token(server: baseURL) != nil
     }
 
     func removeSavedToken() throws {
         guard let rawURL = defaults.string(forKey: baseURLKey), let baseURL = URL(string: rawURL) else { return }
-        try credentials.removeToken(server: baseURL)
+        try credentials.removeOAuthTokens(server: baseURL)
+    }
+
+    func save(baseURL: URL, oauthTokens: PiOAuthTokens) throws {
+        defaults.set(baseURL.absoluteString, forKey: baseURLKey)
+        try credentials.saveOAuthTokens(oauthTokens, server: baseURL)
+    }
+
+    func oauthTokens(baseURL: URL) throws -> PiOAuthTokens? {
+        try credentials.oauthTokens(server: baseURL)
     }
 }

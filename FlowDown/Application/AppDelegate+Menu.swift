@@ -17,41 +17,43 @@ extension AppDelegate {
         super.buildMenu(with: builder)
         guard builder.system == UIMenuSystem.main else { return }
 
-        builder.insertChild(
-            UIMenu(
-                title: "",
-                options: .displayInline,
-                children: [
-                    UIKeyCommand(
-                        title: String(localized: "New Chat"),
-                        action: #selector(requestNewChatFromMenu(_:)),
-                        input: "n",
-                        modifierFlags: .command,
-                    ),
-                    UIMenu(
-                        title: String(localized: "New Chat with Template"),
-                        options: .displayInline,
-                        children: Self.buildTemplateMenuItems(target: self),
-                    ),
-                ],
-            ),
-            atStartOfMenu: .file,
-        )
-        builder.insertChild(
-            UIMenu(
-                title: "",
-                options: .displayInline,
-                children: [
-                    UIKeyCommand(
-                        title: String(localized: "Delete Chat"),
-                        action: #selector(deleteConversationFromMenu(_:)),
-                        input: "\u{8}",
-                        modifierFlags: [.command, .shift],
-                    ),
-                ],
-            ),
-            atEndOfMenu: .file,
-        )
+        #if DEBUG
+            builder.insertChild(
+                UIMenu(
+                    title: "",
+                    options: .displayInline,
+                    children: [
+                        UIKeyCommand(
+                            title: String(localized: "New Chat"),
+                            action: #selector(requestNewChatFromMenu(_:)),
+                            input: "n",
+                            modifierFlags: .command,
+                        ),
+                        UIMenu(
+                            title: String(localized: "New Chat with Template"),
+                            options: .displayInline,
+                            children: Self.buildTemplateMenuItems(target: self),
+                        ),
+                    ],
+                ),
+                atStartOfMenu: .file,
+            )
+            builder.insertChild(
+                UIMenu(
+                    title: "",
+                    options: .displayInline,
+                    children: [
+                        UIKeyCommand(
+                            title: String(localized: "Delete Chat"),
+                            action: #selector(deleteConversationFromMenu(_:)),
+                            input: "\u{8}",
+                            modifierFlags: [.command, .shift],
+                        ),
+                    ],
+                ),
+                atEndOfMenu: .file,
+            )
+        #endif
 
         if UpdateManager.shared.canCheckForUpdates {
             builder.insertSibling(
@@ -238,6 +240,7 @@ extension AppDelegate {
     // new chat with template
 
     @objc func requestNewChatWithTemplateFromMenu(_ sender: UICommand) {
+        guard JonworkSurfacePolicy.allowsLegacyConversations else { return }
         guard let templateIDString = sender.propertyList as? String,
               let templateID = UUID(uuidString: templateIDString),
               let template = ChatTemplateManager.shared.template(for: templateID)
@@ -252,6 +255,7 @@ extension AppDelegate {
     }
 
     func requestNewChatWithTemplateFromMenuWithID(_ templateID: String) {
+        guard JonworkSurfacePolicy.allowsLegacyConversations else { return }
         guard let id = UUID(uuidString: templateID),
               let template = ChatTemplateManager.shared.template(for: id)
         else { return }

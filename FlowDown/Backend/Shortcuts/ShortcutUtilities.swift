@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import Foundation
 import Storage
@@ -83,10 +84,11 @@ enum ShortcutUtilities {
             throw ShortcutUtilitiesError.invalidMessageEncoding
         }
 
-        guard let url = URL(string: "flowdown://new/\(encodedMessage)") else {
+        guard let url = URL(string: "jonwork://new/\(encodedMessage)") else {
             throw ShortcutUtilitiesError.unableToCreateURL
         }
 
         return url
     }
 }
+#endif

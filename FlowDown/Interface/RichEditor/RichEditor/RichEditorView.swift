@@ -112,6 +112,8 @@ class RichEditorView: EditorSectionView {
 
     weak var delegate: Delegate?
     var objectTransactionInProgress = false
+    private var isJonworkConversation = false
+    var jonworkAttachmentMaximumBytes: Int?
     var heightContraints: NSLayoutConstraint = .init()
 
     var handlerColor: UIColor = .init {
@@ -297,6 +299,31 @@ class RichEditorView: EditorSectionView {
     func setProcessingMode(_ isProcessing: Bool) {
         let mode: ColorfulShadowView.Mode = isProcessing ? .appleIntelligence : .idle
         colorfulShadow.mode = mode
+    }
+
+    func setJonworkConversation(
+        _ enabled: Bool,
+        attachmentsEnabled: Bool = false,
+        attachmentMaximumBytes: Int? = nil
+    ) {
+        let configurationChanged = isJonworkConversation != enabled
+            || inputEditor.bossButton.isHidden == attachmentsEnabled
+            || jonworkAttachmentMaximumBytes != attachmentMaximumBytes
+        guard configurationChanged else { return }
+        isJonworkConversation = enabled
+        jonworkAttachmentMaximumBytes = enabled ? attachmentMaximumBytes : nil
+        controlPanel.close()
+        inputEditor.bossButton.isHidden = enabled && !attachmentsEnabled
+        inputEditor.moreButton.isHidden = enabled
+        if enabled {
+            quickSettingBar.browsingToggle.isOn = false
+            quickSettingBar.toolsToggle.isOn = false
+            quickSettingBar.hide()
+        } else {
+            quickSettingBar.show()
+        }
+        inputEditor.setNeedsLayout()
+        setNeedsLayout()
     }
 
     /// used when requesting retry, inherit current option toggles

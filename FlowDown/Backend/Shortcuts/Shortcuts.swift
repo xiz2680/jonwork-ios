@@ -7,6 +7,16 @@ struct Shortcuts: AppShortcutsProvider {
 
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
+            intent: OpenAppIntent(),
+            phrases: [
+                "Open \(.applicationName)",
+            ],
+            shortTitle: LocalizedStringResource("Open Jonwork"),
+            systemImageName: "arrow.up.forward.app",
+        )
+
+        #if DEBUG
+        AppShortcut(
             intent: GenerateResponseIntent(),
             phrases: [
                 "Ask Model on \(.applicationName)",
@@ -104,5 +114,13 @@ struct Shortcuts: AppShortcutsProvider {
             shortTitle: LocalizedStringResource("Translate"),
             systemImageName: "globe",
         )
+        #endif
     }
+
+    enum Surface: Equatable {
+        case openApp
+        case legacyConversationAndModelActions
+    }
+
+    static let productionSurface: [Surface] = [.openApp]
 }

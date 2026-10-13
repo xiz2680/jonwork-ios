@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import Foundation
 import UniformTypeIdentifiers
@@ -82,3 +83,4 @@ struct TranscribeAudioIntent: AppIntent {
         return .result(value: response, dialog: dialog)
     }
 }
+#endif

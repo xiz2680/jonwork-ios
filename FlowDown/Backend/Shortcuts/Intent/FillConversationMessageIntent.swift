@@ -1,3 +1,4 @@
+#if DEBUG
 //
 //  FillConversationMessageIntent.swift
 //  FlowDown
@@ -120,3 +121,4 @@ struct FillConversationMessageIntent: AppIntent {
         )
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import Foundation
 
@@ -33,3 +34,4 @@ struct SetConversationModelIntent: AppIntent {
         return .result(value: message, dialog: dialog)
     }
 }
+#endif

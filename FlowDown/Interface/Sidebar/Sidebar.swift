@@ -28,7 +28,9 @@ class Sidebar: UIView {
         addSubview(newChatButton)
         addSubview(settingButton)
         addSubview(searchButton)
-        addSubview(syncIndicator)
+        #if DEBUG
+            addSubview(syncIndicator)
+        #endif
 
         brandingLabel.snp.makeConstraints { make in
             make.left.top.equalToSuperview()
@@ -60,12 +62,14 @@ class Sidebar: UIView {
             make.left.right.equalToSuperview()
         }
 
-        syncIndicator.snp.makeConstraints { make in
-            make.bottom.equalToSuperview()
-            make.left.equalTo(settingButton.snp.right).offset(8)
-            make.right.equalTo(searchButton.snp.left).offset(-8)
-            make.height.equalTo(32)
-        }
+        #if DEBUG
+            syncIndicator.snp.makeConstraints { make in
+                make.bottom.equalToSuperview()
+                make.left.equalTo(settingButton.snp.right).offset(8)
+                make.right.equalTo(searchButton.snp.left).offset(-8)
+                make.height.equalTo(32)
+            }
+        #endif
     }
 
     @available(*, unavailable)

@@ -1,29 +1,31 @@
-# Privacy Policy
+# Jonwork Privacy Policy
 
 ## Overview
 
-FlowDown respects your privacy and is committed to protecting your personal information. This privacy policy explains our data collection and processing practices.
+Jonwork is a native client for conversations in your connected workspace. This policy describes what the app itself stores and when information leaves your device.
 
-## FlowDown Team Privacy Policy
+## Information Stored on Your Device
 
-- **No Data Collection**: FlowDown developers do not collect, store, or transmit any of your personal information or usage data.
-- **All Data Stays Local**: All content and configurations you create remain entirely on your device.
-- **No Telemetry**: We do not track your usage, behavior patterns, or any other analytical data.
-- **No Crash Reports**: We do not collect crash reports or any diagnostic information.
+- Jonwork stores app preferences and local conversation metadata needed to present and resume your work.
+- Workspace credentials are stored in the Apple Keychain.
+- Jonwork does not include advertising, cross-app tracking, or third-party analytics SDKs.
 
-## Third-Party Services Privacy Policy
+## Connected Workspace Processing
 
-- **Third-Party Data Processing**: When you use cloud model services, your data will be uploaded to your specified service provider for processing. These service providers may collect and process your data according to their privacy policies.
-- **OpenRouter Service**: FlowDown integrates OpenRouter services. Please refer to their privacy policy: [https://openrouter.ai/privacy](https://openrouter.ai/privacy)
-- **pollinations.ai**: FlowDown integrates PollinationsAI services. Please refer to their privacy policy: [https://pollinations.ai/](https://pollinations.ai/)
-- **Configuration Modifications**: If you modify the configurations yourself, please understand the associated risks and take responsibility for your choices.
+- Messages, attachments, tool requests, and conversation controls you submit are sent to the workspace service you connect to so it can run the requested work.
+- Conversation sessions and generated results may be retained by that workspace service. Retention and access are controlled by the operator of the connected workspace.
+- If a workspace uses external model or tool providers, relevant conversation data may be processed under those providers' policies.
+
+## Apple Services
+
+If you choose voice dictation, audio is processed by Apple's speech recognition service according to Apple's privacy policy.
 
 ## Policy Updates
 
-We may update this privacy policy from time to time. Updates will be posted in the application or on our website.
+We may update this policy as Jonwork changes. The current version will be available in the app.
 
 ## Contact Us
 
-If you have any questions or suggestions regarding this privacy policy, please contact us through the application.
+If you have questions about this policy, contact the Jonwork team through the support channel provided with your workspace.
 
-_Last updated: March 3, 2025_
+_Last updated: October 12, 2026_

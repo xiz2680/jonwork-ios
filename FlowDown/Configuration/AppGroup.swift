@@ -8,7 +8,7 @@
 import Foundation
 
 enum AppGroup {
-    static let identifier = "group.wiki.qaq"
+    static let identifier = "group.com.jonwork.ios"
 
     static var containerURL: URL? {
         FileManager.default.containerURL(

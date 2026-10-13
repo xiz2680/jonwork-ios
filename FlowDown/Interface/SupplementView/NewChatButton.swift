@@ -5,6 +5,7 @@
 //  Created by 秋星桥 on 1/22/25.
 //
 
+import AlertController
 import Combine
 import Storage
 import UIKit
@@ -36,25 +37,43 @@ class NewChatButton: UIButton {
     weak var delegate: Delegate?
 
     private func updateMenu() {
-        let templates = ChatTemplateManager.shared.templates
+        #if DEBUG
+            let templates = ChatTemplateManager.shared.templates
 
-        if templates.isEmpty {
-            // No templates, use direct tap action
+            if templates.isEmpty {
+                // No templates, use direct tap action
+                showsMenuAsPrimaryAction = false
+                removeTarget(nil, action: nil, for: .touchUpInside)
+                addTarget(self, action: #selector(createNewConversation), for: .touchUpInside)
+                menu = nil
+            } else {
+                // Has templates, show menu
+                showsMenuAsPrimaryAction = true
+                removeTarget(nil, action: nil, for: .touchUpInside)
+                menu = UIMenu(children: buildMenu())
+            }
+        #else
             showsMenuAsPrimaryAction = false
             removeTarget(nil, action: nil, for: .touchUpInside)
-            addTarget(self, action: #selector(createNewConversation), for: .touchUpInside)
+            addTarget(self, action: #selector(showUnavailable), for: .touchUpInside)
             menu = nil
-        } else {
-            // Has templates, show menu
-            showsMenuAsPrimaryAction = true
-            removeTarget(nil, action: nil, for: .touchUpInside)
-            menu = UIMenu(children: buildMenu())
-        }
+        #endif
     }
 
     @objc private func createNewConversation() {
         let conv = ConversationManager.shared.createNewConversation()
         delegate?.newChatDidCreated(conv.id)
+    }
+
+    @objc private func showUnavailable() {
+        let alert = AlertViewController(
+            title: "Conversations Unavailable",
+            message: "Jonwork sign-in is not available in this build. No local conversation was created.",
+        ) { context in
+            context.allowSimpleDispose()
+            context.addAction(title: "OK", attribute: .accent) { context.dispose() }
+        }
+        parentViewController?.present(alert, animated: true)
     }
 
     private func buildMenu() -> [UIMenuElement] {

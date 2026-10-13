@@ -1,3 +1,4 @@
+#if DEBUG
 //
 //  ShowConversationIntent.swift
 //  FlowDown
@@ -51,3 +52,4 @@ struct ShowConversationIntent: AppIntent {
         return .result(dialog: dialog)
     }
 }
+#endif

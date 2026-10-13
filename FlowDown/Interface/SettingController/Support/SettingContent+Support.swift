@@ -52,61 +52,17 @@ extension SettingController.SettingContent.SupportController {
         title: String.LocalizationValue,
         objects: [ConfigurableObject],
     )
-    var documentObject: SettingSection {
-        (
-            title: "Read Documents",
+    var versionObject: SettingSection {
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        return (
+            title: "App Information",
             objects: [
                 ConfigurableObject(
-                    icon: "safari",
-                    title: "Open Documentation",
-                    explain: "We provided a comprehensive documentation to help you understand how to use this app effectively.",
-                    ephemeralAnnotation: .link(
-                        title: "Open...",
-                        url: URL(string: "https://flowdown.ai/docs/")!,
-                    ),
-                ),
-            ],
-        )
-    }
-
-    var contactObject: SettingSection {
-        (
-            title: "Contact Us",
-            objects: [
-                ConfigurableObject(
-                    icon: "envelope",
-                    title: "Email",
-                    explain: "Send us an email.",
-                    ephemeralAnnotation: .link(
-                        title: "Open...",
-                        url: URL(string: "mailto:flowdownapp@qaq.wiki")!,
-                    ),
-                ),
-                ConfigurableObject(
-                    icon: "safari",
-                    title: "\("GitHub")",
-                    explain: "Leave a message on GitHub issue.",
-                    ephemeralAnnotation: .link(
-                        title: "Open...",
-                        url: URL(string: "https://github.com/Lakr233/FlowDown/issues")!,
-                    ),
-                ),
-                ConfigurableObject(
-                    icon: "bubble.left",
-                    title: "\("Discord")",
-                    explain: "Join our Discord server.",
-                    ephemeralAnnotation: .link(
-                        title: "Open...",
-                        url: URL(string: "https://discord.gg/UHKMRyJcgc")!,
-                    ),
-                ),
-                ConfigurableObject(
-                    icon: "doc.richtext",
-                    title: "View Logs",
-                    explain: "Inspect recent application logs for troubleshooting.",
-                    ephemeralAnnotation: .action { controller in
-                        controller.navigationController?.pushViewController(LogViewerController(), animated: true)
-                    },
+                    icon: "info.circle",
+                    title: "Version",
+                    explain: "\(version) (\(build))",
+                    ephemeralAnnotation: .action { _ in },
                 ),
             ],
         )
@@ -146,10 +102,9 @@ extension SettingController.SettingContent.SupportController {
 
     var settingSections: [SettingSection] {
         [
-            documentObject,
-            contactObject,
             agreementsObject,
             openSourceObject,
+            versionObject,
         ]
     }
 }

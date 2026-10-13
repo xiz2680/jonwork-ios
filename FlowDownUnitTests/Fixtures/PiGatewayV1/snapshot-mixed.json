@@ -1,0 +1,17 @@
+{
+  "contract":"pi-gateway/1.0","sessionId":"session-mixed","repositoryId":"repo-01","revision":11,"lastEventId":"40","runtime":"running",
+  "run":{"status":"idle","operationId":null},"controller":{"clientId":"ios-01","leaseExpiresAt":"2026-10-13T08:30:00.000Z"},
+  "configuration":{"model":{"provider":"openai","id":"gpt-example"},"thinkingLevel":"medium"},
+  "messages":[
+    {"id":"assistant-mixed","role":"assistant","status":"completed","content":[
+      {"type":"thinking","text":"First reason. "},{"type":"thinking","text":"Second reason."},
+      {"type":"text","text":"Answer part one. "},{"type":"text","text":"Answer part two."},
+      {"type":"tool_call","toolCallId":"parent","text":"{\"path\":\"README.md\"}"},
+      {"type":"tool_result","toolCallId":"parent","text":"parent result"},
+      {"type":"tool_call","toolCallId":"second","text":"{\"path\":\"Package.swift\"}"},
+      {"type":"tool_result","toolCallId":"second","text":"second result"},
+      {"type":"attachment","attachmentId":"attachment-01"}
+    ]}
+  ],
+  "attachments":[{"attachmentId":"attachment-01","fileName":"diagram.png","mediaType":"image/png","byteLength":128,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"ready","expiresAt":"2026-10-13T09:00:00.000Z"}]
+}

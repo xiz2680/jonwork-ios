@@ -1,148 +1,150 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "CFBundleDisplayName" : {
-      "comment" : "Bundle display name",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDown Übersetzen"
+  "sourceLanguage": "en",
+  "strings": {
+    "CFBundleDisplayName": {
+      "comment": "Bundle display name",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jonwork Translate"
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDown Translate"
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jonwork Translate"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDown Traducir"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jonwork Translate"
           }
         },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDown Traduire"
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jonwork Translate"
           }
         },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDown 翻訳"
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jonwork Translate"
           }
         },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDown 번역"
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jonwork Translate"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDown 翻译"
-          }
-        }
-      }
-    },
-    "CFBundleName" : {
-      "comment" : "Bundle name",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDownTranslationProvider"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDownTranslationProvider"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDownTranslationProvider"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDownTranslationProvider"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDownTranslationProvider"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDownTranslationProvider"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FlowDownTranslationProvider"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jonwork Translate"
           }
         }
       },
-      "shouldTranslate" : false
+      "shouldTranslate": false
     },
-    "NSHumanReadableCopyright" : {
-      "comment" : "Copyright (human-readable)",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Urheberrecht © 2025 FlowDown Team. Alle Rechte vorbehalten."
+    "CFBundleName": {
+      "comment": "Bundle name",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JonworkTranslationProvider"
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copyright © 2025 FlowDown Team. All rights reserved."
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JonworkTranslationProvider"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copyright © 2025 Equipo de FlowDown. Todos los derechos reservados."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JonworkTranslationProvider"
           }
         },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copyright © 2025 Équipe FlowDown. Tous droits réservés."
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JonworkTranslationProvider"
           }
         },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "著作権 © 2025 FlowDown Team. 無断転載を禁じます。"
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JonworkTranslationProvider"
           }
         },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "저작권 © 2025 FlowDown 팀. 모든 권리 보유."
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JonworkTranslationProvider"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "© 2025 FlowDown 团队 版权所有"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JonworkTranslationProvider"
           }
         }
-      }
+      },
+      "shouldTranslate": false
+    },
+    "NSHumanReadableCopyright": {
+      "comment": "Copyright (human-readable)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
+          }
+        }
+      },
+      "shouldTranslate": false
     }
   },
-  "version" : "1.1"
+  "version": "1.0"
 }

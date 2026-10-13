@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import ChatClientKit
 import Foundation
@@ -127,3 +128,4 @@ struct GenerateChatResponseWithImagesIntent: AppIntent {
         return .result(value: response, dialog: dialog)
     }
 }
+#endif

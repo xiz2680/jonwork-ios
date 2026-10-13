@@ -15,6 +15,12 @@ struct PiConversationState: Equatable, Sendable {
     var controllerClientID: String?
     var role: PiClientRole = .viewer
     var isReleased = false
+    var revision = 0
+    var lastEventID = "0"
+    var activeOperationID: String?
+    var lastFailedOperationID: String?
+    var failure: PiConversationFailure?
+    var attachmentIDs: [String] = []
     var messages: [PiPresentationMessage] = []
 }
 
@@ -32,17 +38,194 @@ struct PiToolPresentation: Equatable, Sendable {
     enum State: Equatable, Sendable { case running, succeeded, failed }
 
     let callID: String
+    var parentCallID: String?
     var name: String
     var detail: String
     var state: State
 }
 
 struct PiSessionReducer: Sendable {
+    static let maximumToolDetailCharacters = 8_192
+    static let maximumPresentationMessages = 2_000
+    static let toolDetailTruncationMarker = "\n… [truncated by Jonwork]"
+
     private(set) var state = PiConversationState()
     private var activeMessageID: String?
     private var activeAnonymousToolIDs: [String: String] = [:]
     private var nextMessageSequence = 0
     private var nextToolSequence = 0
+
+    mutating func accept(_ receipt: PiGatewayWire.MutationReceipt) {
+        state.revision = receipt.revision
+    }
+
+    mutating func observe(revision: Int, lastEventID: String) {
+        state.revision = revision
+        state.lastEventID = lastEventID
+    }
+
+    mutating func reduce(_ event: PiConversationEvent) {
+        switch event {
+        case let .snapshot(snapshot, clientID):
+            state = Self.project(snapshot, clientID: clientID)
+            resetTransientIdentity()
+        case let .operationAccepted(id, _, _):
+            state.activeOperationID = id
+            state.isStreaming = true
+            state.failure = nil
+        case let .userMessage(id, text, _):
+            upsert(.init(id: id, role: .user, text: text, reasoning: "", tool: nil))
+        case .turnStarted:
+            state.isStreaming = true
+        case let .assistantStarted(_, _, messageID):
+            upsert(.init(id: messageID, role: .assistant, text: "", reasoning: "", tool: nil))
+        case let .assistantTextDelta(messageID, delta):
+            append(delta, to: messageID, reasoning: false)
+        case let .assistantReasoningDelta(messageID, delta):
+            append(delta, to: messageID, reasoning: true)
+        case let .toolStarted(tool):
+            upsert(.init(
+                id: "tool-\(tool.callID)",
+                role: .tool,
+                text: "",
+                reasoning: "",
+                tool: .init(
+                    callID: tool.callID,
+                    parentCallID: tool.parentCallID,
+                    name: tool.name ?? String(localized: "Tool"),
+                    detail: Self.truncateToolDetail(tool.detail ?? ""),
+                    state: .running
+                )
+            ))
+        case let .toolUpdated(tool):
+            updateDomainTool(tool, state: .running)
+        case let .toolCompleted(tool):
+            updateDomainTool(tool, state: tool.succeeded == true ? .succeeded : .failed)
+        case let .assistantCompleted(_, status, error):
+            if status == "error", let error { state.failure = error }
+        case .turnCompleted, .abortRequested:
+            break
+        case let .operationSettled(id, status, _, error):
+            state.isStreaming = false
+            state.activeOperationID = nil
+            state.failure = error
+            state.lastFailedOperationID = status == "failed" ? id : nil
+        case let .error(_, failure):
+            state.failure = failure
+        case let .controllerChanged(_, current, _):
+            state.controllerClientID = current
+            state.role = current == state.clientID ? .controller : .viewer
+        case .released:
+            state.isReleased = true
+            state.isStreaming = false
+            state.controllerClientID = nil
+            state.role = .viewer
+        }
+    }
+
+    private mutating func append(_ delta: String, to messageID: String, reasoning: Bool) {
+        let index: Int
+        if let existing = state.messages.firstIndex(where: { $0.id == messageID }) {
+            index = existing
+        } else {
+            state.messages.append(.init(id: messageID, role: .assistant, text: "", reasoning: "", tool: nil))
+            index = state.messages.index(before: state.messages.endIndex)
+        }
+        if reasoning { state.messages[index].reasoning += delta } else { state.messages[index].text += delta }
+    }
+
+    private mutating func updateDomainTool(_ event: PiConversationEvent.Tool, state toolState: PiToolPresentation.State) {
+        let id = "tool-\(event.callID)"
+        guard let index = self.state.messages.firstIndex(where: { $0.id == id }),
+              var tool = self.state.messages[index].tool
+        else { return }
+        if let detail = event.detail { tool.detail = Self.truncateToolDetail(detail) }
+        tool.state = toolState
+        self.state.messages[index].tool = tool
+    }
+
+    private static func project(_ snapshot: PiGatewayWire.Snapshot, clientID: String) -> PiConversationState {
+        var messages: [PiPresentationMessage] = []
+        for message in snapshot.messages {
+            var text = ""
+            var reasoning = ""
+            var tools: [String: PiToolPresentation] = [:]
+            var toolOrder: [String] = []
+            var attachmentIDs: [String] = []
+            for content in message.content {
+                switch content.type {
+                case .text: text += content.text ?? ""
+                case .thinking: reasoning += content.text ?? ""
+                case .toolCall:
+                    let callID = content.toolCallId ?? "\(message.id)-tool"
+                    if tools[callID] == nil { toolOrder.append(callID) }
+                    tools[callID] = .init(
+                        callID: callID,
+                        parentCallID: nil,
+                        name: String(localized: "Tool"),
+                        detail: content.text ?? "",
+                        state: .running
+                    )
+                case .toolResult:
+                    let callID = content.toolCallId ?? "\(message.id)-tool"
+                    if tools[callID] == nil { toolOrder.append(callID) }
+                    tools[callID] = .init(
+                        callID: callID,
+                        parentCallID: nil,
+                        name: String(localized: "Tool"),
+                        detail: content.text ?? "",
+                        state: message.status == .error ? .failed : .succeeded
+                    )
+                case .attachment:
+                    if let attachmentID = content.attachmentId { attachmentIDs.append(attachmentID) }
+                }
+            }
+            let role: PiPresentationMessage.Role = switch message.role {
+            case .user: .user
+            case .assistant: .assistant
+            case .tool: .tool
+            }
+            if !text.isEmpty || !reasoning.isEmpty || (tools.isEmpty && attachmentIDs.isEmpty) {
+                messages.append(.init(id: message.id, role: role, text: text, reasoning: reasoning, tool: nil))
+            }
+            for callID in toolOrder {
+                guard let tool = tools[callID] else { continue }
+                messages.append(.init(
+                    id: "tool-\(callID)",
+                    role: .tool,
+                    text: "",
+                    reasoning: "",
+                    tool: tool
+                ))
+            }
+            for attachmentID in attachmentIDs {
+                let attachment = snapshot.attachments.first { $0.attachmentId == attachmentID }
+                messages.append(.init(
+                    id: "attachment-\(attachmentID)",
+                    role: role,
+                    text: attachment?.fileName ?? attachmentID,
+                    reasoning: "",
+                    tool: nil
+                ))
+            }
+        }
+        return .init(
+            sessionID: snapshot.sessionId,
+            repository: snapshot.repositoryId,
+            isStreaming: snapshot.run.status != .idle,
+            model: snapshot.configuration.model.map { .init(provider: $0.provider, id: $0.id, name: nil) },
+            thinkingLevel: snapshot.configuration.thinkingLevel.rawValue,
+            clientID: clientID,
+            controllerClientID: snapshot.controller.clientId,
+            role: snapshot.controller.clientId == clientID ? .controller : .viewer,
+            isReleased: snapshot.runtime == .stopped,
+            revision: snapshot.revision,
+            lastEventID: snapshot.lastEventId,
+            activeOperationID: snapshot.run.operationId,
+            attachmentIDs: snapshot.attachments.map(\.attachmentId),
+            messages: Array(messages.suffix(maximumPresentationMessages))
+        )
+    }
 
     mutating func reduce(_ event: PiServerEvent) {
         switch event {
@@ -105,7 +288,7 @@ struct PiSessionReducer: Sendable {
                 role: .tool,
                 text: "",
                 reasoning: "",
-                tool: .init(callID: callID, name: name, detail: Self.render(event.payload["args"]), state: .running),
+                tool: .init(callID: callID, parentCallID: nil, name: name, detail: Self.renderToolDetail(event.payload["args"]), state: .running),
             ))
         case "tool_execution_update":
             updateTool(event, state: .running, detailKey: "partialResult")
@@ -122,6 +305,9 @@ struct PiSessionReducer: Sendable {
             state.messages[index] = message
         } else {
             state.messages.append(message)
+            if state.messages.count > Self.maximumPresentationMessages {
+                state.messages.removeFirst(state.messages.count - Self.maximumPresentationMessages)
+            }
         }
     }
 
@@ -136,8 +322,9 @@ struct PiSessionReducer: Sendable {
             reasoning: "",
             tool: .init(
                 callID: callID,
+                parentCallID: nil,
                 name: name,
-                detail: Self.render(event.payload[detailKey]),
+                detail: Self.renderToolDetail(event.payload[detailKey]),
                 state: toolState,
             ),
         )
@@ -193,14 +380,15 @@ struct PiSessionReducer: Sendable {
                     reasoning: "",
                     tool: .init(
                         callID: callID,
+                        parentCallID: nil,
                         name: block["name"]?.stringValue ?? String(localized: "Tool"),
-                        detail: render(block["arguments"]),
+                        detail: renderToolDetail(block["arguments"]),
                         state: .running
                     )
                 ), to: &result)
             }
         }
-        return result
+        return Array(result.suffix(maximumPresentationMessages))
     }
 
     private static func replaceOrAppend(_ message: PiPresentationMessage, to messages: inout [PiPresentationMessage]) {
@@ -248,8 +436,9 @@ struct PiSessionReducer: Sendable {
             let callID = object["toolCallId"]?.stringValue ?? id
             tool = .init(
                 callID: callID,
+                parentCallID: nil,
                 name: object["toolName"]?.stringValue ?? String(localized: "Tool"),
-                detail: text.isEmpty ? render(object["content"]) : text,
+                detail: truncateToolDetail(text.isEmpty ? render(object["content"]) : text),
                 state: object["isError"] == .bool(true) ? .failed : .succeeded,
             )
             text = ""
@@ -299,6 +488,16 @@ struct PiSessionReducer: Sendable {
         case .object, .array:
             return (try? JSONEncoder.pretty.encode(value)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
         }
+    }
+
+    static func renderToolDetail(_ value: PiJSONValue?) -> String {
+        truncateToolDetail(render(value))
+    }
+
+    static func truncateToolDetail(_ detail: String) -> String {
+        guard detail.count > maximumToolDetailCharacters else { return detail }
+        let contentLimit = maximumToolDetailCharacters - toolDetailTruncationMarker.count
+        return String(detail.prefix(contentLimit)) + toolDetailTruncationMarker
     }
 }
 

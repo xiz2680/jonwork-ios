@@ -5,6 +5,7 @@
 //  Created by qaq on 4/11/2025.
 //
 
+#if DEBUG
 import AppIntents
 import ChatClientKit
 import Foundation
@@ -120,7 +121,9 @@ enum InferenceIntentHandler {
         audio: IntentFile?,
         options: Options,
         dependencies: Dependencies? = nil,
+        legacyActionsEnabled: Bool = ShortcutAvailability.legacyActionsEnabled,
     ) async throws -> String {
+        try ShortcutAvailability.performLegacyAction(enabled: legacyActionsEnabled) {}
         let dependencies = dependencies ?? defaultDependencies
         let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasImage = image != nil
@@ -511,3 +514,4 @@ enum InferenceIntentHandler {
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import Foundation
 import Storage
@@ -164,3 +165,4 @@ private extension Message {
         return false
     }
 }
+#endif

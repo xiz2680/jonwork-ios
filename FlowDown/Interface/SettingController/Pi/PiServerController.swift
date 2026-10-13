@@ -1,39 +1,7 @@
 import AlertController
+import AuthenticationServices
 import Storage
 import UIKit
-
-struct PiCreatedSession: Equatable, Sendable {
-    let sessionID: String
-    let repository: String
-    let clientID: String
-    let baseURL: URL
-
-    static func create(
-        service: any PiServiceProtocol,
-        repository: String,
-        resumePath: String?,
-        clientID: String,
-        baseURL: URL
-    ) async throws -> Self {
-        let sessionID = try await service.createSession(
-            repository: repository,
-            resumePath: resumePath,
-            clientID: clientID
-        )
-        return .init(sessionID: sessionID, repository: repository, clientID: clientID, baseURL: baseURL)
-    }
-
-    @MainActor
-    func bind(conversationID: Conversation.ID, coordinator: PiSessionCoordinator) {
-        coordinator.bind(
-            conversationID: conversationID,
-            sessionID: sessionID,
-            repository: repository,
-            clientID: clientID,
-            baseURL: baseURL
-        )
-    }
-}
 
 extension SettingController.SettingContent {
     final class PiServerController: UITableViewController {
@@ -43,31 +11,28 @@ extension SettingController.SettingContent {
             case sessions
         }
 
-        private let profileStore: PiServerProfileStore
+        private let domainCoordinator: PiServerDomainCoordinator
         private let autoConnect: Bool
         private let clientID = UUID().uuidString
-        private var service: (any PiServiceProtocol)?
-        private var repositories: [String] = []
-        private var sessions: [PiSessionSummary] = []
+        private var repositories: [PiRepositoryPresentation] = []
+        private var sessions: [PiSessionPresentation] = []
         private var selectedRepository: String?
-        private var connectedBaseURL: URL?
+        private var isConnected = false
         private var isLoading = false
+        private var isSigningOut = false
+        private var connectTask: Task<Void, Never>?
         private(set) var hasSavedToken = false
+        private lazy var oauthClient = PiOAuthClient { [weak self] in
+            self?.view.window ?? ASPresentationAnchor()
+        }
 
         private lazy var serverField = makeField(
             placeholder: String(localized: "Pi server URL"),
             keyboardType: .URL,
             contentType: .URL
         )
-        private lazy var tokenField = makeField(
-            placeholder: String(localized: "Access token (optional)"),
-            keyboardType: .default,
-            contentType: .password,
-            secure: true
-        )
-
         init(profileStore: PiServerProfileStore = PiServerProfileStore(), autoConnect: Bool = true) {
-            self.profileStore = profileStore
+            domainCoordinator = PiServerDomainCoordinator(profileStore: profileStore)
             self.autoConnect = autoConnect
             super.init(style: .insetGrouped)
             title = String(localized: "Pi Server")
@@ -84,10 +49,10 @@ extension SettingController.SettingContent {
             tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
             navigationItem.largeTitleDisplayMode = .never
             do {
-                if let profile = try profileStore.load() {
+                if let profile = try domainCoordinator.savedProfile() {
                     serverField.text = profile.baseURL.absoluteString
-                    hasSavedToken = profile.token != nil
-                    if autoConnect { Task { await connect() } }
+                    hasSavedToken = try domainCoordinator.hasSavedCredentials()
+                    if autoConnect { startConnect() }
                 } else {
                     serverField.text = "http://localhost:4317"
                 }
@@ -100,9 +65,17 @@ extension SettingController.SettingContent {
             Section.allCases.count
         }
 
+        override func viewDidDisappear(_ animated: Bool) {
+            super.viewDidDisappear(animated)
+            if isMovingFromParent || navigationController?.isBeingDismissed == true {
+                connectTask?.cancel()
+                connectTask = nil
+            }
+        }
+
         override func tableView(_: UITableView, numberOfRowsInSection section: Int) -> Int {
             switch Section(rawValue: section) {
-            case .connection: 4
+            case .connection: 3
             case .repositories: max(repositories.count, 1) + (selectedRepository == nil ? 0 : 1)
             case .sessions: max(sessions.count, 1)
             case nil: 0
@@ -120,7 +93,7 @@ extension SettingController.SettingContent {
 
         override func tableView(_: UITableView, titleForFooterInSection section: Int) -> String? {
             guard Section(rawValue: section) == .connection else { return nil }
-            return String(localized: "Tokens are stored in Keychain. Leave the token field blank to keep the saved token. HTTPS is required outside local development.")
+            return String(localized: "Tokens are stored in Keychain. HTTPS is required outside local development.")
         }
 
         override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -136,31 +109,30 @@ extension SettingController.SettingContent {
             case .connection:
                 if indexPath.row == 0 {
                     configure(cell, with: serverField)
+                    serverField.isEnabled = !isSigningOut
                 } else if indexPath.row == 1 {
-                    configure(cell, with: tokenField)
-                } else if indexPath.row == 2 {
                     configuration.text = isLoading ? String(localized: "Connecting…") : String(localized: "Connect")
-                    configuration.textProperties.color = isLoading ? .secondaryLabel : .tintColor
+                    configuration.textProperties.color = isLoading || isSigningOut ? .secondaryLabel : .tintColor
                     configuration.image = UIImage(systemName: isLoading ? "arrow.triangle.2.circlepath" : "network")
-                    cell.selectionStyle = isLoading ? .none : .default
+                    cell.selectionStyle = isLoading || isSigningOut ? .none : .default
                 } else {
                     configuration.text = String(localized: "Remove Saved Token")
                     configuration.textProperties.color = hasSavedToken ? .systemRed : .secondaryLabel
                     configuration.image = UIImage(systemName: "key.slash")
-                    cell.selectionStyle = hasSavedToken ? .default : .none
+                    cell.selectionStyle = hasSavedToken && !isSigningOut ? .default : .none
                 }
             case .repositories:
                 if repositories.isEmpty {
-                    configuration.text = service == nil
+                    configuration.text = !isConnected
                         ? String(localized: "Connect to load repositories")
                         : String(localized: "No repositories found")
                     configuration.textProperties.color = .secondaryLabel
                     cell.selectionStyle = .none
                 } else if indexPath.row < repositories.count {
                     let repository = repositories[indexPath.row]
-                    configuration.text = URL(fileURLWithPath: repository).lastPathComponent
-                    configuration.secondaryText = repository
-                    cell.accessoryType = repository == selectedRepository ? .checkmark : .none
+                    configuration.text = repository.displayName
+                    configuration.secondaryText = repository.id
+                    cell.accessoryType = repository.id == selectedRepository ? .checkmark : .none
                 } else {
                     configuration.text = String(localized: "New Pi Conversation")
                     configuration.textProperties.color = .tintColor
@@ -168,16 +140,14 @@ extension SettingController.SettingContent {
                 }
             case .sessions:
                 if sessions.isEmpty {
-                    configuration.text = service == nil
+                    configuration.text = !isConnected
                         ? String(localized: "Connect to load sessions")
                         : String(localized: "No recent sessions")
                     configuration.textProperties.color = .secondaryLabel
                     cell.selectionStyle = .none
                 } else {
                     let session = sessions[indexPath.row]
-                    configuration.text = session.name?.nilIfBlank
-                        ?? session.firstMessage.nilIfBlank
-                        ?? String(localized: "Untitled")
+                    configuration.text = session.name?.nilIfBlank ?? String(localized: "Untitled")
                     let messageCountKey: String.LocalizationValue = "\(session.messageCount) messages"
                     configuration.secondaryText = session.isRunning
                         ? String(localized: "Live") + " · " + String(localized: messageCountKey)
@@ -195,53 +165,51 @@ extension SettingController.SettingContent {
         override func tableView(_: UITableView, didSelectRowAt indexPath: IndexPath) {
             tableView.deselectRow(at: indexPath, animated: true)
             switch Section(rawValue: indexPath.section) {
-            case .connection where indexPath.row == 2:
-                Task { await connect() }
-            case .connection where indexPath.row == 3 && hasSavedToken:
+            case .connection where indexPath.row == 1:
+                startConnect()
+            case .connection where indexPath.row == 2 && hasSavedToken && !isSigningOut:
                 confirmRemoveSavedToken()
             case .repositories where !repositories.isEmpty && indexPath.row < repositories.count:
-                selectedRepository = repositories[indexPath.row]
-                Task { await reloadSessions() }
+                selectedRepository = repositories[indexPath.row].id
+                Task { await selectRepository(selectedRepository) }
             case .repositories where selectedRepository != nil && indexPath.row == repositories.count:
-                Task { await openSession(resumePath: nil) }
+                Task { await openSession(resumeSessionID: nil) }
             case .sessions where !sessions.isEmpty:
-                Task { await openSession(resumePath: sessions[indexPath.row].path) }
+                Task { await openSession(resumeSessionID: sessions[indexPath.row].id) }
             default:
                 break
             }
         }
 
         private func connect() async {
-            guard !isLoading else { return }
+            guard !isLoading, !isSigningOut else { return }
             view.endEditing(true)
             do {
                 guard let rawURL = serverField.text?.trimmingCharacters(in: .whitespacesAndNewlines),
                       let url = URL(string: rawURL)
-                else { throw PiServiceError.invalidServerURL }
-                let enteredToken = tokenField.text?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
-                let savedProfile = try profileStore.load()
-                let token = enteredToken ?? (savedProfile?.baseURL == url ? savedProfile?.token : nil)
-                let configuration = try PiServerConfiguration(baseURL: url, token: token)
+                else { throw PiServerDomainError.invalidServerURL }
                 setLoading(true)
                 defer { setLoading(false) }
-                let service = PiService(configuration: configuration)
-                try await service.health()
-                let repositories = try await service.listRepositories()
-                try profileStore.save(baseURL: url, token: enteredToken)
-                hasSavedToken = try profileStore.hasSavedToken()
-                self.service = service
-                connectedBaseURL = configuration.baseURL
-                self.repositories = repositories
-                selectedRepository = repositories.first
-                await reloadSessions()
+                let presentation = try await domainCoordinator.authenticate(baseURL: url, authorizer: oauthClient)
+                apply(presentation)
+                hasSavedToken = try domainCoordinator.hasSavedCredentials()
+            } catch is CancellationError {
+                return
             } catch {
-                service = nil
-                connectedBaseURL = nil
+                isConnected = false
                 repositories = []
                 sessions = []
                 selectedRepository = nil
                 tableView.reloadData()
                 presentError(error)
+            }
+        }
+
+        private func startConnect() {
+            guard !isSigningOut else { return }
+            connectTask?.cancel()
+            connectTask = Task { @MainActor [weak self] in
+                await self?.connect()
             }
         }
 
@@ -253,54 +221,71 @@ extension SettingController.SettingContent {
                 context.addAction(title: "Cancel") { context.dispose() }
                 context.addAction(title: "Remove Token", attribute: .accent) { [weak self] in
                     context.dispose()
-                    self?.removeSavedToken()
+                    Task { await self?.removeSavedToken() }
                 }
             }
             present(alert, animated: true)
         }
 
-        func removeSavedToken() {
+        func removeSavedToken() async {
+            guard !isSigningOut else { return }
+            isSigningOut = true
+            tableView.reloadSections(IndexSet(integer: Section.connection.rawValue), with: .none)
+            connectTask?.cancel()
+            connectTask = nil
+            defer {
+                isSigningOut = false
+                isConnected = false
+                repositories = []
+                sessions = []
+                selectedRepository = nil
+                hasSavedToken = (try? domainCoordinator.hasSavedCredentials()) ?? false
+                tableView.reloadData()
+            }
             do {
-                try profileStore.removeSavedToken()
-                tokenField.text = nil
-                hasSavedToken = false
-                tableView.reloadSections(IndexSet(integer: Section.connection.rawValue), with: .none)
+                try await domainCoordinator.signOut()
             } catch {
                 presentError(error)
             }
+        }
+
+        private func selectRepository(_ repositoryID: String?) async {
+            guard let repositoryID, !isSigningOut else { return }
+            do {
+                apply(try await domainCoordinator.selectRepository(repositoryID))
+            } catch is CancellationError {
+                return
+            } catch {
+                presentError(error)
+            }
+        }
+
+        private func apply(_ presentation: PiServerPresentation) {
+            repositories = presentation.repositories
+            sessions = presentation.sessions
+            selectedRepository = presentation.selectedRepositoryID
+            isConnected = presentation.isConnected
+            tableView.reloadData()
         }
 
         private func reloadSessions() async {
-            guard let service else { return }
-            do {
-                sessions = try await service.listSessions(repository: selectedRepository)
-                tableView.reloadSections(
-                    IndexSet([Section.repositories.rawValue, Section.sessions.rawValue]),
-                    with: .automatic
-                )
-            } catch {
-                presentError(error)
-            }
+            await selectRepository(selectedRepository)
         }
 
-        private func openSession(resumePath: String?) async {
-            guard let service, let repository = selectedRepository, let connectedBaseURL else { return }
+        private func openSession(resumeSessionID: String?) async {
+            guard selectedRepository != nil, !isSigningOut else { return }
             setLoading(true)
             defer { setLoading(false) }
             do {
-                let createdSession = try await PiCreatedSession.create(
-                    service: service,
-                    repository: repository,
-                    resumePath: resumePath,
+                let createdSession = try await domainCoordinator.createOrRestoreSession(
                     clientID: clientID,
-                    baseURL: connectedBaseURL
+                    resumeSessionID: resumeSessionID
                 )
-                let summary = sessions.first { $0.path == resumePath }
+                let summary = sessions.first { $0.id == resumeSessionID }
                 let conversation = ConversationManager.shared.createNewConversation({ conversation in
                     conversation.update(
                         \.title,
                         to: summary?.name?.nilIfBlank
-                            ?? summary?.firstMessage.nilIfBlank
                             ?? String(localized: "New Pi Conversation")
                     )
                     conversation.update(\.modelId, to: "pi:\(createdSession.sessionID)")
@@ -312,9 +297,11 @@ extension SettingController.SettingContent {
                 }
                 localSession.save()
                 localSession.notifyMessagesDidChange()
-                createdSession.bind(conversationID: conversation.id, coordinator: .shared)
+                createdSession.bind(conversationID: conversation.id)
                 ChatSelection.shared.select(conversation.id, options: [.collapseSidebar, .focusEditor])
                 dismiss(animated: true)
+            } catch is CancellationError {
+                return
             } catch {
                 presentError(error)
             }

@@ -9,6 +9,31 @@ import UniformTypeIdentifiers
 @Suite(.serialized)
 struct ShortcutIntentSmokeTests {
     @Test
+    func `production inference shortcut fails before resolving or invoking a provider`() async {
+        let recorder = ShortcutIntentRecorder()
+        let dependencies = makeShortcutDependencies(
+            recorder: recorder,
+            modelCapabilities: [],
+            responseText: "Must not run"
+        )
+
+        await #expect(throws: ShortcutError.unavailable) {
+            try await InferenceIntentHandler.execute(
+                model: nil,
+                message: "Do not send",
+                image: nil,
+                audio: nil,
+                options: .init(allowsImages: false, saveToConversation: true),
+                dependencies: dependencies,
+                legacyActionsEnabled: false
+            )
+        }
+        #expect(recorder.resolvedModel == nil)
+        #expect(recorder.streamedMessages.isEmpty)
+        #expect(recorder.persisted.isEmpty)
+    }
+
+    @Test
     @MainActor
     func `create new conversation intent returns the created entity`() async throws {
         try await FlowDownTestContext.shared.ensureBootstrappedEnvironment()

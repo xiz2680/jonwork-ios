@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import Foundation
 
@@ -128,3 +129,4 @@ struct TranslateTextIntent: AppIntent {
         return .result(value: response, dialog: dialog)
     }
 }
+#endif

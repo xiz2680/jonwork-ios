@@ -1,8 +1,56 @@
+import CryptoKit
 import Foundation
 import Storage
 
 extension Notification.Name {
     static let piSessionDidChange = Notification.Name("PiSessionDidChange")
+}
+
+enum JonworkSurfacePolicy {
+    static let productionAllowsLegacyConversations = false
+    static let productionIncludesLegacyMenuCommands = false
+    static let productionAllowsLegacyProviderNetworking = false
+
+    static var allowsLegacyConversations: Bool {
+        #if DEBUG
+            return true
+        #else
+            return productionAllowsLegacyConversations
+        #endif
+    }
+
+    static var allowsLegacyProviderNetworking: Bool {
+        #if DEBUG
+            return true
+        #else
+            return productionAllowsLegacyProviderNetworking
+        #endif
+    }
+
+    static func permitsConversation(
+        hasJonworkBinding: Bool,
+        allowsLegacyConversations: Bool = allowsLegacyConversations
+    ) -> Bool {
+        return hasJonworkBinding || allowsLegacyConversations
+    }
+
+    static func shouldCreateInitialConversation(
+        isConversationListEmpty: Bool,
+        allowsLegacyConversations: Bool = allowsLegacyConversations
+    ) -> Bool {
+        return isConversationListEmpty && allowsLegacyConversations
+    }
+
+    static func permitsLegacyConversationActions(
+        hasJonworkBinding: Bool,
+        allowsLegacyConversations: Bool = allowsLegacyConversations
+    ) -> Bool {
+        return allowsLegacyConversations && !hasJonworkBinding
+    }
+
+    static func permitsLegacyProviderAccess(hasJonworkBinding: Bool) -> Bool {
+        return !hasJonworkBinding
+    }
 }
 
 @MainActor
@@ -35,6 +83,14 @@ final class PiSessionCoordinator {
     private let renderOverride: ((Conversation.ID, PiConversationState) -> Void)?
     private var bindings: [Conversation.ID: Binding]
     private var reducers: [Conversation.ID: PiSessionReducer] = [:]
+    private var adapters: [Conversation.ID: PiEventAdapter] = [:]
+    private var discoveries: [Conversation.ID: PiGatewayWire.Discovery] = [:]
+    private var availableModels: [Conversation.ID: [PiGatewayWire.Model]] = [:]
+    private var mutationsInFlight: Set<Conversation.ID> = []
+    private let pendingMutationStore: any PiPendingMutationStoring
+    private var pendingMutationStoreLoadFailed = false
+    private var pendingMutations: [Conversation.ID: PiPendingMutationRecord] = [:]
+    private var lastMutationReceipts: [Conversation.ID: PiGatewayWire.MutationReceipt] = [:]
     private var phases: [Conversation.ID: ConnectionPhase] = [:]
     private var services: [Conversation.ID: any PiServiceProtocol] = [:]
     private var eventTasks: [Conversation.ID: Task<Void, Never>] = [:]
@@ -49,6 +105,7 @@ final class PiSessionCoordinator {
         defaults: UserDefaults = .standard,
         profileProvider: (() throws -> PiServerProfile?)? = nil,
         serviceFactory: ((PiServerProfile) throws -> any PiServiceProtocol)? = nil,
+        pendingMutationStore: any PiPendingMutationStoring = PiPendingMutationStore(),
         reconnectDelay: @escaping (Int) async throws -> Void = { attempt in
             let milliseconds = min(8_000, 500 * (1 << min(attempt - 1, 4)))
             try await Task.sleep(for: .milliseconds(milliseconds))
@@ -63,7 +120,14 @@ final class PiSessionCoordinator {
         }
         self.reconnectDelay = reconnectDelay
         self.renderOverride = renderOverride
+        self.pendingMutationStore = pendingMutationStore
         bindings = Self.decodeBindings(defaults.data(forKey: bindingsKey))
+        do {
+            pendingMutations = try pendingMutationStore.load()
+        } catch {
+            pendingMutationStoreLoadFailed = true
+            pendingMutations = [:]
+        }
     }
 
     func binding(for conversationID: Conversation.ID?) -> Binding? {
@@ -102,6 +166,10 @@ final class PiSessionCoordinator {
             baseURL: baseURL
         )
         reducers[conversationID] = nil
+        adapters[conversationID] = nil
+        discoveries[conversationID] = nil
+        availableModels[conversationID] = nil
+        lastMutationReceipts[conversationID] = nil
         phases[conversationID] = nil
         clearProjection(conversationID)
         persistBindings()
@@ -112,6 +180,17 @@ final class PiSessionCoordinator {
         cancelConnection(conversationID)
         clearProjection(conversationID)
         reducers[conversationID] = nil
+        adapters[conversationID] = nil
+        discoveries[conversationID] = nil
+        availableModels[conversationID] = nil
+        mutationsInFlight.remove(conversationID)
+        var retained = pendingMutations
+        retained[conversationID] = nil
+        do {
+            try pendingMutationStore.save(retained)
+            pendingMutations = retained
+        } catch {}
+        lastMutationReceipts[conversationID] = nil
         phases[conversationID] = nil
         bindings[conversationID] = nil
         if activeConversationID == conversationID { activeConversationID = nil }
@@ -124,6 +203,13 @@ final class PiSessionCoordinator {
         }
         bindings.removeAll()
         reducers.removeAll()
+        adapters.removeAll()
+        discoveries.removeAll()
+        availableModels.removeAll()
+        mutationsInFlight.removeAll()
+        pendingMutations.removeAll()
+        try? persistPendingMutations()
+        lastMutationReceipts.removeAll()
         phases.removeAll()
         services.removeAll()
         renderTasks.values.forEach { $0.cancel() }
@@ -135,6 +221,14 @@ final class PiSessionCoordinator {
         persistBindings()
     }
 
+    func revokeAllCredentialsAndState() async {
+        let activeServices = Array(services.values)
+        unbindAll()
+        for service in activeServices {
+            await service.cancelAllRequests()
+        }
+    }
+
     func activate(conversationID: Conversation.ID?) {
         guard activeConversationID != conversationID || conversationID.flatMap({ eventTasks[$0] }) == nil else { return }
         activeConversationID = conversationID
@@ -143,6 +237,19 @@ final class PiSessionCoordinator {
         }
         guard let conversationID, bindings[conversationID] != nil else { return }
         connect(conversationID: conversationID)
+    }
+
+    func suspendActiveSession() {
+        guard let activeConversationID else { return }
+        cancelConnection(activeConversationID)
+        phases[activeConversationID] = .connecting
+        notify(activeConversationID)
+    }
+
+    func refreshActiveSession() {
+        guard let activeConversationID, bindings[activeConversationID] != nil else { return }
+        cancelConnection(activeConversationID)
+        connect(conversationID: activeConversationID)
     }
 
     func reconnect(conversationID: Conversation.ID) {
@@ -177,23 +284,37 @@ final class PiSessionCoordinator {
                     guard isCurrent(conversationID, binding: binding, generation: generation) else { return }
                     services[conversationID] = service
                     let clientID = binding.clientID
-
-                    let snapshot = try await service.state(sessionID: binding.sessionID)
+                    let discovery = try await service.discover()
+                    let models = try await service.listModels()
+                    let snapshot = try await service.snapshot(sessionID: binding.sessionID)
                     try Task.checkCancellation()
                     guard isCurrent(conversationID, binding: binding, generation: generation) else { return }
+                    var adapter = PiEventAdapter()
+                    let replacement = try adapter.replace(with: snapshot, clientID: clientID)
                     var reducer = PiSessionReducer()
-                    reducer.replace(snapshot: snapshot, clientID: clientID)
+                    reducer.reduce(replacement)
+                    adapters[conversationID] = adapter
                     reducers[conversationID] = reducer
+                    discoveries[conversationID] = discovery
+                    availableModels[conversationID] = models
                     phases[conversationID] = .connected
                     render(conversationID)
 
                     streamStartedAt = .now
-                    for try await event in service.events(sessionID: binding.sessionID, clientID: clientID) {
+                    for try await wireEvent in service.events(
+                        sessionID: binding.sessionID,
+                        clientID: clientID,
+                        afterEventID: snapshot.lastEventId
+                    ) {
                         try Task.checkCancellation()
                         guard isCurrent(conversationID, binding: binding, generation: generation) else { return }
+                        guard var currentAdapter = adapters[conversationID] else { return }
+                        let event = try currentAdapter.adapt(wireEvent)
                         var current = reducers[conversationID] ?? reducer
                         current.reduce(event)
-                        if event.resetsReconnectBackoff { attempt = 0 }
+                        current.observe(revision: currentAdapter.revision, lastEventID: currentAdapter.lastEventID?.string ?? snapshot.lastEventId)
+                        attempt = 0
+                        adapters[conversationID] = currentAdapter
                         reducers[conversationID] = current
                         phases[conversationID] = .connected
                         if current.state.isReleased {
@@ -215,6 +336,8 @@ final class PiSessionCoordinator {
                     services[conversationID] = nil
                     phases[conversationID] = .offline(error.localizedDescription)
                     notify(conversationID)
+                    if let error = error as? PiServiceError, !error.isRecoverableTransportFailure { return }
+                    if let error = error as? PiAdapterError, !error.requiresSnapshotRecovery { return }
                     attempt += 1
                     do {
                         try await reconnectDelay(attempt)
@@ -230,15 +353,34 @@ final class PiSessionCoordinator {
         }
     }
 
-    func send(text: String, delivery: PiCommand.Delivery?, conversationID: Conversation.ID) async throws {
+    func send(
+        text: String,
+        attachments: [PiAttachmentUpload] = [],
+        delivery: PiConversationAction.Delivery,
+        conversationID: Conversation.ID
+    ) async throws {
         let context = try commandContext(conversationID)
         guard context.state.role == .controller else { throw PiCoordinatorError.viewer }
         guard !context.state.isReleased else { throw PiCoordinatorError.released }
-        guard context.state.isStreaming == (delivery != nil) else { throw PiCoordinatorError.sessionStateChanged }
-        try await context.service.send(
-            .prompt(clientID: context.clientID, text: text, delivery: delivery),
-            sessionID: context.binding.sessionID
+        guard context.state.isStreaming == (delivery != .prompt) else { throw PiCoordinatorError.sessionStateChanged }
+        let attachmentIDs = try await upload(
+            attachments,
+            conversationID: conversationID,
+            context: context
         )
+        try await performMutation(
+            .send(text: text, attachmentIDs: attachmentIDs, delivery: delivery),
+            conversationID: conversationID
+        )
+    }
+
+    func send(text: String, delivery: PiCommand.Delivery?, conversationID: Conversation.ID) async throws {
+        let domainDelivery: PiConversationAction.Delivery = switch delivery {
+        case .steer: .steer
+        case .followUp: .followUp
+        case nil: .prompt
+        }
+        try await send(text: text, delivery: domainDelivery, conversationID: conversationID)
     }
 
     func abort(conversationID: Conversation.ID) async throws {
@@ -246,7 +388,43 @@ final class PiSessionCoordinator {
         guard context.state.role == .controller else { throw PiCoordinatorError.viewer }
         guard !context.state.isReleased else { throw PiCoordinatorError.released }
         guard context.state.isStreaming else { throw PiCoordinatorError.notStreaming }
-        try await context.service.send(.abort(clientID: context.clientID), sessionID: context.binding.sessionID)
+        try await performMutation(.abort, conversationID: conversationID)
+    }
+
+    func retry(conversationID: Conversation.ID) async throws {
+        let context = try commandContext(conversationID)
+        guard context.state.role == .controller else { throw PiCoordinatorError.viewer }
+        guard !context.state.isStreaming,
+              let operationID = context.state.lastFailedOperationID
+        else { throw PiCoordinatorError.sessionStateChanged }
+        try await performMutation(.retry(operationID: operationID), conversationID: conversationID)
+    }
+
+    func rename(_ name: String, conversationID: Conversation.ID) async throws {
+        let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, value.count <= 200 else { throw PiCoordinatorError.sessionStateChanged }
+        try await performMutation(.rename(value), conversationID: conversationID)
+    }
+
+    func setModel(provider: String, modelID: String, conversationID: Conversation.ID) async throws {
+        guard availableModels[conversationID]?.contains(where: {
+            $0.provider == provider && $0.id == modelID
+        }) == true else { throw PiCoordinatorError.capabilityUnavailable }
+        try await performMutation(.setModel(provider: provider, modelID: modelID), conversationID: conversationID)
+    }
+
+    func setThinkingLevel(_ level: PiGatewayWire.ThinkingLevel, conversationID: Conversation.ID) async throws {
+        guard let state = reducers[conversationID]?.state,
+              let selected = state.model,
+              availableModels[conversationID]?.first(where: {
+                  $0.provider == selected.provider && $0.id == selected.id
+              })?.thinkingLevels.contains(level) == true
+        else { throw PiCoordinatorError.capabilityUnavailable }
+        try await performMutation(.setThinkingLevel(level), conversationID: conversationID)
+    }
+
+    func compact(instructions: String?, conversationID: Conversation.ID) async throws {
+        try await performMutation(.compact(instructions: instructions), conversationID: conversationID)
     }
 
     func takeOver(conversationID: Conversation.ID) async throws {
@@ -254,14 +432,315 @@ final class PiSessionCoordinator {
         guard context.state.role == .viewer else { throw PiCoordinatorError.alreadyController }
         guard !context.state.isReleased else { throw PiCoordinatorError.released }
         guard !context.state.isStreaming else { throw PiCoordinatorError.streaming }
-        try await context.service.takeOver(sessionID: context.binding.sessionID, clientID: context.clientID)
+        try await performMutation(.takeOver, conversationID: conversationID)
     }
 
     func release(conversationID: Conversation.ID) async throws {
         let context = try commandContext(conversationID)
         guard context.state.role == .controller else { throw PiCoordinatorError.viewer }
         guard !context.state.isReleased else { throw PiCoordinatorError.released }
-        try await context.service.release(sessionID: context.binding.sessionID, clientID: context.clientID)
+        try await performMutation(.release, conversationID: conversationID)
+    }
+
+    func models(conversationID: Conversation.ID) -> [PiGatewayWire.Model] {
+        availableModels[conversationID] ?? []
+    }
+
+    func supportsAttachments(conversationID: Conversation.ID, kind: PiAttachmentUpload.Kind) -> Bool {
+        guard let discovery = discoveries[conversationID] else { return false }
+        switch kind {
+        case .image: return discovery.capabilities.attachments.images
+        case .file: return discovery.capabilities.attachments.files
+        }
+    }
+
+    func canAttach(conversationID: Conversation.ID) -> Bool {
+        guard let state = reducers[conversationID]?.state,
+              let selected = state.model,
+              let model = availableModels[conversationID]?.first(where: {
+                  $0.provider == selected.provider && $0.id == selected.id
+              })
+        else { return false }
+        return (supportsAttachments(conversationID: conversationID, kind: .image) && model.input.contains(.image))
+            || (supportsAttachments(conversationID: conversationID, kind: .file) && model.input.contains(.file))
+    }
+
+    func attachmentMaximumBytes(conversationID: Conversation.ID) -> Int? {
+        guard canAttach(conversationID: conversationID) else { return nil }
+        return discoveries[conversationID]?.limits.attachmentMaxBytes
+    }
+
+    private func performMutation(_ action: PiConversationAction, conversationID: Conversation.ID) async throws {
+        guard !pendingMutationStoreLoadFailed else { throw PiServiceError.invalidResponse }
+        guard mutationsInFlight.insert(conversationID).inserted else { throw PiCoordinatorError.mutationInFlight }
+        defer { mutationsInFlight.remove(conversationID) }
+        let context = try commandContext(conversationID)
+        switch action {
+        case .takeOver:
+            guard context.state.role == .viewer,
+                  !context.state.isReleased,
+                  !context.state.isStreaming
+            else { throw PiCoordinatorError.sessionStateChanged }
+        default:
+            guard context.state.role == .controller else { throw PiCoordinatorError.viewer }
+            guard !context.state.isReleased else { throw PiCoordinatorError.released }
+        }
+        let pending: PiPendingMutationRecord
+        if let existing = pendingMutations[conversationID] {
+            guard existing.sessionID == context.binding.sessionID,
+                  existing.clientID == context.clientID,
+                  existing.action == action,
+                  existing.expiresAt > Date(),
+                  existing.requestDigest == Self.mutationDigest(
+                      sessionID: existing.sessionID,
+                      clientID: existing.clientID,
+                      action: existing.action,
+                      context: existing.context
+                  )
+            else { throw PiCoordinatorError.mutationInFlight }
+            pending = existing
+            if let receipt = existing.receipt {
+                try await accept(
+                    receipt,
+                    pending: existing,
+                    conversationID: conversationID,
+                    service: context.service
+                )
+                return
+            }
+            try await resolveAmbiguous(
+                pending,
+                conversationID: conversationID,
+                service: context.service
+            )
+            return
+        } else {
+            guard let retention = discoveries[conversationID]?.limits.idempotencyRetentionSeconds else {
+                throw PiCoordinatorError.notConnected
+            }
+            let mutationContext = PiMutationContext(
+                idempotencyKey: UUID().uuidString,
+                revision: context.state.revision
+            )
+            let newPending = PiPendingMutationRecord(
+                sessionID: context.binding.sessionID,
+                clientID: context.clientID,
+                action: action,
+                context: mutationContext,
+                requestDigest: Self.mutationDigest(
+                    sessionID: context.binding.sessionID,
+                    clientID: context.clientID,
+                    action: action,
+                    context: mutationContext
+                ),
+                createdAt: Date(),
+                expiresAt: Date().addingTimeInterval(TimeInterval(retention))
+            )
+            pending = newPending
+            pendingMutations[conversationID] = newPending
+            try persistPendingMutations()
+        }
+        do {
+            let receipt = try await submit(pending, service: context.service)
+            let recorded = try recordReceipt(receipt, pending: pending, conversationID: conversationID)
+            try await accept(receipt, pending: recorded, conversationID: conversationID, service: context.service)
+        } catch {
+            let retained = pendingMutations[conversationID] ?? pending
+            if retained.receipt != nil {
+                throw error
+            }
+            if error as? PiServiceError == .conflict {
+                try clearPendingMutation(conversationID)
+                reconnect(conversationID: conversationID)
+                throw error
+            }
+            if Self.isAmbiguousMutationFailure(error) {
+                try await resolveAmbiguous(
+                    retained,
+                    conversationID: conversationID,
+                    service: context.service
+                )
+            } else {
+                try clearPendingMutation(conversationID)
+                throw error
+            }
+        }
+    }
+
+    private func submit(
+        _ pending: PiPendingMutationRecord,
+        service: any PiServiceProtocol
+    ) async throws -> PiGatewayWire.MutationReceipt {
+        try await service.mutate(
+            pending.action,
+            sessionID: pending.sessionID,
+            clientID: pending.clientID,
+            context: pending.context
+        )
+    }
+
+    private func resolveAmbiguous(
+        _ pending: PiPendingMutationRecord,
+        conversationID: Conversation.ID,
+        service: any PiServiceProtocol
+    ) async throws {
+        do {
+            switch try await service.mutationReceipt(
+                sessionID: pending.sessionID,
+                idempotencyKey: pending.context.idempotencyKey,
+                clientID: pending.clientID
+            ) {
+            case let .pending(sessionID):
+                guard sessionID == pending.sessionID else { throw PiServiceError.invalidResponse }
+                throw PiCoordinatorError.mutationPending
+            case let .applied(receipt):
+                let recorded = try recordReceipt(receipt, pending: pending, conversationID: conversationID)
+                try await accept(receipt, pending: recorded, conversationID: conversationID, service: service)
+            }
+        } catch PiServiceError.mutationNotFound {
+            let receipt = try await submit(pending, service: service)
+            let recorded = try recordReceipt(receipt, pending: pending, conversationID: conversationID)
+            try await accept(receipt, pending: recorded, conversationID: conversationID, service: service)
+        } catch {
+            throw error
+        }
+    }
+
+    private func recordReceipt(
+        _ receipt: PiGatewayWire.MutationReceipt,
+        pending: PiPendingMutationRecord,
+        conversationID: Conversation.ID
+    ) throws -> PiPendingMutationRecord {
+        let recorded = PiPendingMutationRecord(
+            sessionID: pending.sessionID,
+            clientID: pending.clientID,
+            action: pending.action,
+            context: pending.context,
+            requestDigest: pending.requestDigest,
+            receipt: receipt,
+            createdAt: pending.createdAt,
+            expiresAt: pending.expiresAt
+        )
+        pendingMutations[conversationID] = recorded
+        try persistPendingMutations()
+        return recorded
+    }
+
+    private func accept(
+        _ receipt: PiGatewayWire.MutationReceipt,
+        pending: PiPendingMutationRecord,
+        conversationID: Conversation.ID,
+        service: any PiServiceProtocol
+    ) async throws {
+        guard receipt.status == .applied,
+              receipt.sessionId == pending.sessionID,
+              (200 ..< 300).contains(receipt.responseStatus)
+        else { throw PiServiceError.invalidResponse }
+        let snapshot = try await service.snapshot(sessionID: pending.sessionID)
+        guard snapshot.sessionId == pending.sessionID,
+              snapshot.revision >= receipt.revision
+        else { throw PiServiceError.invalidResponse }
+        var adapter = PiEventAdapter()
+        let replacement = try adapter.replace(with: snapshot, clientID: pending.clientID)
+        var reducer = PiSessionReducer()
+        reducer.reduce(replacement)
+        adapters[conversationID] = adapter
+        reducers[conversationID] = reducer
+        lastMutationReceipts[conversationID] = receipt
+        try clearPendingMutation(conversationID)
+        render(conversationID)
+    }
+
+    private static func mutationDigest(
+        sessionID: String,
+        clientID: String,
+        action: PiConversationAction,
+        context: PiMutationContext
+    ) -> String {
+        struct Canonical: Encodable {
+            let sessionID: String
+            let clientID: String
+            let action: PiConversationAction
+            let context: PiMutationContext
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = (try? encoder.encode(Canonical(
+            sessionID: sessionID,
+            clientID: clientID,
+            action: action,
+            context: context
+        ))) ?? Data()
+        return Data(SHA256.hash(data: data)).base64EncodedString()
+    }
+
+    private func persistPendingMutations() throws {
+        try pendingMutationStore.save(pendingMutations)
+    }
+
+    private func clearPendingMutation(_ conversationID: Conversation.ID) throws {
+        var updated = pendingMutations
+        updated[conversationID] = nil
+        try pendingMutationStore.save(updated)
+        pendingMutations = updated
+    }
+
+    private static func isAmbiguousMutationFailure(_ error: Error) -> Bool {
+        guard let error = error as? PiServiceError else { return false }
+        switch error {
+        case .timedOut, .connectionLost, .networkUnavailable, .transportFailure:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func upload(
+        _ attachments: [PiAttachmentUpload],
+        conversationID: Conversation.ID,
+        context: (binding: Binding, service: any PiServiceProtocol, clientID: String, state: PiConversationState)
+    ) async throws -> [String] {
+        guard !attachments.isEmpty else { return [] }
+        guard let discovery = discoveries[conversationID] else { throw PiCoordinatorError.capabilityUnavailable }
+        let sizes = try attachments.map { try $0.byteCount() }
+        guard attachments.count <= discovery.limits.attachmentsPerPrompt,
+              sizes.reduce(0, +) <= discovery.limits.attachmentTotalBytes
+        else { throw PiCoordinatorError.attachmentLimitExceeded }
+        var result: [String] = []
+        for (attachment, size) in zip(attachments, sizes) {
+            guard size <= discovery.limits.attachmentMaxBytes,
+                  supportsAttachments(conversationID: conversationID, kind: attachment.kind),
+                  modelSupports(attachment.kind, state: context.state, conversationID: conversationID),
+                  discovery.limits.attachmentMediaTypes.contains(attachment.mediaType)
+            else { throw PiCoordinatorError.capabilityUnavailable }
+            let data = try await attachment.load(maximumBytes: discovery.limits.attachmentMaxBytes)
+            let uploaded = try await context.service.uploadAttachment(
+                data: data,
+                fileName: attachment.fileName,
+                mediaType: attachment.mediaType,
+                repositoryID: context.binding.repository,
+                idempotencyKey: UUID().uuidString
+            )
+            guard uploaded.status == .ready else { throw PiServiceError.invalidResponse }
+            result.append(uploaded.attachmentId)
+        }
+        return result
+    }
+
+    private func modelSupports(
+        _ kind: PiAttachmentUpload.Kind,
+        state: PiConversationState,
+        conversationID: Conversation.ID
+    ) -> Bool {
+        guard let selected = state.model,
+              let model = availableModels[conversationID]?.first(where: {
+                  $0.provider == selected.provider && $0.id == selected.id
+              })
+        else { return false }
+        switch kind {
+        case .image: return model.input.contains(.image)
+        case .file: return model.input.contains(.file)
+        }
     }
 
     private func commandContext(_ conversationID: Conversation.ID) throws -> (
@@ -384,7 +863,7 @@ final class PiSessionCoordinator {
     }
 
     private func isCurrent(_ conversationID: Conversation.ID, binding: Binding, generation: UInt64) -> Bool {
-        !Task.isCancelled
+        return !Task.isCancelled
             && activeConversationID == conversationID
             && bindings[conversationID] == binding
             && generations[conversationID] == generation
@@ -401,6 +880,7 @@ final class PiSessionCoordinator {
         eventTasks[conversationID]?.cancel()
         eventTasks[conversationID] = nil
         services[conversationID] = nil
+        adapters[conversationID] = nil
         renderTasks[conversationID]?.cancel()
         renderTasks[conversationID] = nil
     }
@@ -423,13 +903,6 @@ final class PiSessionCoordinator {
 
 private struct PiMessageMetadata: Codable {
     let remoteID: String
-}
-
-private extension PiServerEvent {
-    var resetsReconnectBackoff: Bool {
-        if case .initial = self { return false }
-        return true
-    }
 }
 
 private extension PiPresentationMessage {
@@ -470,18 +943,26 @@ enum PiCoordinatorError: LocalizedError, Equatable {
     case alreadyController
     case sessionStateChanged
     case profileMismatch
+    case mutationInFlight
+    case mutationPending
+    case capabilityUnavailable
+    case attachmentLimitExceeded
 
     var errorDescription: String? {
         switch self {
-        case .notBound: String(localized: "This conversation is not linked to a Pi session.")
-        case .notConnected: String(localized: "Pi is reconnecting. Try again in a moment.")
-        case .viewer: String(localized: "This session is view-only. Take control before sending a message.")
-        case .streaming: String(localized: "Wait for the current response to finish before taking control.")
-        case .released: String(localized: "This session has been released to the Pi CLI.")
-        case .notStreaming: String(localized: "There is no active Pi response to stop.")
-        case .alreadyController: String(localized: "This device already controls the Pi session.")
-        case .sessionStateChanged: String(localized: "The Pi session state changed. Review it and send again.")
-        case .profileMismatch: String(localized: "This conversation belongs to a different Pi server. Restore that server profile to reconnect.")
+        case .notBound: String(localized: "This conversation is not available in Jonwork.")
+        case .notConnected: String(localized: "Jonwork is reconnecting. Try again in a moment.")
+        case .viewer: String(localized: "This conversation is read-only on this device. Choose Edit on This Device before sending a message.")
+        case .streaming: String(localized: "Wait for the current response to finish before editing on this device.")
+        case .released: String(localized: "This conversation is now available on your desktop.")
+        case .notStreaming: String(localized: "There is no active response to stop.")
+        case .alreadyController: String(localized: "This conversation is already editable on this device.")
+        case .sessionStateChanged: String(localized: "The conversation changed. Review it and send again.")
+        case .profileMismatch: String(localized: "This conversation belongs to another Jonwork connection. Sign in to the correct workspace to reconnect.")
+        case .mutationInFlight: String(localized: "Another conversation change is still being sent. Try again in a moment.")
+        case .mutationPending: String(localized: "The previous conversation change is still being confirmed. Try again in a moment.")
+        case .capabilityUnavailable: String(localized: "This server or model does not support the requested attachment.")
+        case .attachmentLimitExceeded: String(localized: "The selected attachments exceed the server limit.")
         }
     }
 }

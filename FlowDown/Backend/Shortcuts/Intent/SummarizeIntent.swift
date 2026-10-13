@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import Foundation
 
@@ -117,3 +118,4 @@ enum SummarizeIntentHelper {
         )
     }
 }
+#endif

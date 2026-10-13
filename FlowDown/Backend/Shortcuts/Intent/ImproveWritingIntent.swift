@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import Foundation
 
@@ -180,3 +181,4 @@ enum ImproveWritingIntentHelper {
         )
     }
 }
+#endif

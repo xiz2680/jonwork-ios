@@ -62,6 +62,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard !RecoveryMode.isActivated else { return }
         UIUserInterfaceStyle.reapplyConfiguredStyle()
         MLX.GPU.onApplicationBecomeActivate()
+        PiSessionCoordinator.shared.refreshActiveSession()
         #if canImport(ActivityKit) && os(iOS) && !targetEnvironment(macCatalyst)
             if #available(iOS 16.2, *) {
                 LiveActivityService.shared.appDidEnterForeground()
@@ -72,6 +73,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneWillResignActive(_: UIScene) {
         guard !RecoveryMode.isActivated else { return }
         MLX.GPU.onApplicationResignActivate()
+        PiSessionCoordinator.shared.suspendActiveSession()
         #if canImport(ActivityKit) && os(iOS) && !targetEnvironment(macCatalyst)
             if #available(iOS 16.2, *) {
                 LiveActivityService.shared.appWillEnterBackground()
@@ -97,17 +99,21 @@ private extension SceneDelegate {
     func handleIncomingURL(_ url: URL) {
         switch url.scheme {
         case "file":
-            switch url.pathExtension {
-            case "fdmodel", "plist":
-                importModel(from: url)
-            case "fdtemplate":
-                importTemplate(from: url)
-            case "fdmcp":
-                importMCPServer(from: url)
-            default: break // dont know how
-            }
-        case "flowdown":
-            handleFlowDownURL(url)
+            #if DEBUG
+                switch url.pathExtension {
+                case "fdmodel", "plist":
+                    importModel(from: url)
+                case "fdtemplate":
+                    importTemplate(from: url)
+                case "fdmcp":
+                    importMCPServer(from: url)
+                default: break // dont know how
+                }
+            #endif
+        case "jonwork", "flowdown":
+            #if DEBUG
+                handleDevelopmentURL(url)
+            #endif
         default:
             break
         }
@@ -188,7 +194,8 @@ private extension SceneDelegate {
         }
     }
 
-    func handleFlowDownURL(_ url: URL) {
+    #if DEBUG
+    func handleDevelopmentURL(_ url: URL) {
         Logger.app.infoFile("handling incoming message: \(url)")
         if let handled = ModelExchangeAPI.resolveInputScheme(url) {
             if handled == false {
@@ -212,4 +219,5 @@ private extension SceneDelegate {
         let message = encodedMessage.removingPercentEncoding?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         mainController.queueNewConversation(text: message, shouldSend: !message.isEmpty)
     }
+    #endif
 }

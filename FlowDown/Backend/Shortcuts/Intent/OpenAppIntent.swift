@@ -10,12 +10,12 @@ import Foundation
 
 struct OpenAppIntent: AppIntent {
     static var title: LocalizedStringResource {
-        "Open FlowDown"
+        "Open Jonwork"
     }
 
     static var description: IntentDescription {
         IntentDescription(
-            LocalizedStringResource("Launch FlowDown without performing any additional actions."),
+            LocalizedStringResource("Launch Jonwork without performing any additional actions."),
             categoryName: LocalizedStringResource("Utilities"),
         )
     }
@@ -25,7 +25,7 @@ struct OpenAppIntent: AppIntent {
     }
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Open FlowDown")
+        Summary("Open Jonwork")
     }
 
     func perform() async throws -> some IntentResult {

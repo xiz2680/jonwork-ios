@@ -73,9 +73,11 @@ extension ConversationSelectionView {
         }
 
         private var conversationIdentifier: Conversation.ID?
+        private var allowsLegacyConversations = false
 
-        func use(_ conv: Conversation?) {
+        func use(_ conv: Conversation?, allowsLegacyConversations: Bool = JonworkSurfacePolicy.allowsLegacyConversations) {
             conversationIdentifier = conv?.id
+            self.allowsLegacyConversations = allowsLegacyConversations
             guard let conv else {
                 titleLabel.text = nil
                 iconView.image = UIImage(systemName: "doc.text")
@@ -90,12 +92,17 @@ extension ConversationSelectionView {
             configurationForMenuAtLocation _: CGPoint,
         ) -> UIContextMenuConfiguration? {
             guard let conversationIdentifier else { return nil }
+            guard JonworkSurfacePolicy.permitsLegacyConversationActions(
+                hasJonworkBinding: PiSessionCoordinator.shared.binding(for: conversationIdentifier) != nil,
+                allowsLegacyConversations: allowsLegacyConversations
+            ) else { return nil }
 
             return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
                 guard let self else { return nil }
                 return ConversationManager.shared.menu(
                     forConversation: conversationIdentifier,
                     view: self,
+                    allowsLegacyConversations: self.allowsLegacyConversations
                 )
             }
         }

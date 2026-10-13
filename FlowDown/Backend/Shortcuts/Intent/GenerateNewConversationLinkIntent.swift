@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import Foundation
 
@@ -37,3 +38,4 @@ struct GenerateNewConversationLinkIntent: AppIntent {
         return .result(value: link, dialog: dialog)
     }
 }
+#endif

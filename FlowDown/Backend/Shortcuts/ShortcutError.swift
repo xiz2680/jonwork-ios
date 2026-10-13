@@ -9,6 +9,7 @@ import AppIntents
 import Foundation
 
 enum ShortcutError: LocalizedError {
+    case unavailable
     case emptyMessage
     case modelUnavailable
     case emptyResponse
@@ -22,6 +23,8 @@ enum ShortcutError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .unavailable:
+            String(localized: "This shortcut is unavailable in Jonwork.")
         case .emptyMessage:
             String(localized: "Empty message.")
         case .modelUnavailable:
@@ -43,5 +46,23 @@ enum ShortcutError: LocalizedError {
         case .invalidCandidates:
             String(localized: "At least one candidate is required.")
         }
+    }
+}
+
+enum ShortcutAvailability {
+    static var legacyActionsEnabled: Bool {
+        #if DEBUG
+            true
+        #else
+            false
+        #endif
+    }
+
+    static func performLegacyAction<T>(
+        enabled: Bool = legacyActionsEnabled,
+        _ action: () throws -> T
+    ) throws -> T {
+        guard enabled else { throw ShortcutError.unavailable }
+        return try action()
     }
 }

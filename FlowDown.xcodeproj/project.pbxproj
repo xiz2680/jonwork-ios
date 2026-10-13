@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		50014D7F2D8A9B3C00C10932 /* GlyphixTextFx in Frameworks */ = {isa = PBXBuildFile; productRef = 50014D7E2D8A9B3C00C10932 /* GlyphixTextFx */; };
 		500373C52D62757700585574 /* ScrubberKit in Frameworks */ = {isa = PBXBuildFile; productRef = 500373C42D62757700585574 /* ScrubberKit */; };
-		5017A3EF2EED53FD0023F420 /* FlowDownTranslationProvider.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 5017A3E82EED53FD0023F420 /* FlowDownTranslationProvider.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		502272D22EB3DE3200AF9D28 /* UIEffectKit in Frameworks */ = {isa = PBXBuildFile; productRef = 502272D12EB3DE3200AF9D28 /* UIEffectKit */; };
 		502BCBD12D43DB2B00500180 /* ConfigurableKit in Frameworks */ = {isa = PBXBuildFile; productRef = 502BCBD02D43DB2B00500180 /* ConfigurableKit */; };
 		50383CEA2D2E1E0D00426941 /* BetterCodable in Frameworks */ = {isa = PBXBuildFile; productRef = 50383CE92D2E1E0D00426941 /* BetterCodable */; };
@@ -84,7 +83,6 @@
 			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
 			dstSubfolderSpec = 16;
 			files = (
-				5017A3EF2EED53FD0023F420 /* FlowDownTranslationProvider.appex in Embed ExtensionKit Extensions */,
 			);
 			name = "Embed ExtensionKit Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -345,7 +343,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				5017A3EE2EED53FD0023F420 /* PBXTargetDependency */,
 				50433ECF2F0D6A8300445939 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
@@ -609,7 +606,7 @@
 				CURRENT_PROJECT_VERSION = "$(inherited)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FlowDownTranslationProvider/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "FlowDown Translate";
+				INFOPLIST_KEY_CFBundleDisplayName = "Jonwork Translate";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -618,7 +615,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = "$(inherited)";
-				PRODUCT_BUNDLE_IDENTIFIER = wiki.qaq.flow.FlowDownTranslationProvider;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonwork.ios.translation-provider;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -641,7 +638,7 @@
 				CURRENT_PROJECT_VERSION = "$(inherited)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FlowDownTranslationProvider/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "FlowDown Translate";
+				INFOPLIST_KEY_CFBundleDisplayName = "Jonwork Translate";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -650,7 +647,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = "$(inherited)";
-				PRODUCT_BUNDLE_IDENTIFIER = wiki.qaq.flow.FlowDownTranslationProvider;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonwork.ios.translation-provider;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -703,19 +700,16 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "FlowDown/Resources/InfoPlist/Info-iOS.plist";
 				"INFOPLIST_FILE[sdk=macosx*]" = "FlowDown/Resources/InfoPlist/Info-Catalyst.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = FlowDown;
+				INFOPLIST_KEY_CFBundleDisplayName = Jonwork;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSCalendarsUsageDescription = "FlowDown requires calendar permissions to access your schedule information for features like suggesting available meeting times, scheduling appointments with contacts, and sending reminders for upcoming events. For example, when you ask \"Find a time for a team meeting next week,\" FlowDown will check your calendar to identify free slots. Your calendar data is only processed temporarily while answering your queries and is not stored by FlowDown. If you're using a cloud-based AI model, this data may be sent to your chosen service provider during processing.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "We use your camera to take picture. Your photo may be uploaded by your choice.";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025 FlowDown Team. All rights reserved.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FlowDown requires LAN access for interact with local service providers. We do not collect any information from your LAN";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "FlowDown requires location permissions to provide location-based assistance when you request it. For example, when you ask \"Find coffee shops near me\" or \"How long will it take to get to my next meeting,\" FlowDown will access your current location to provide relevant recommendations or travel times. Your location is only accessed when needed for specific requests and is not stored by FlowDown. This data may be sent to your chosen service provider if using a cloud-based AI model.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "We use your audio data for speech recognition. Your data is processed by system; we do not collect that information.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "FlowDown requires this permission to save image for you. Your data will be saved locally.";
-				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "FlowDown requires Reminders access so you can ask the assistant to create, view, change, complete, or delete your reminders. For example, when you ask \"Add buying milk to my reminders for tomorrow,\" FlowDown will write the reminder into your default Reminders list. Your reminders are only processed locally to fulfill the request and are not stored by FlowDown. If you're using a cloud-based AI model, the relevant reminder text may be sent to your chosen service provider during processing.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "We use your audio data for speech recognition. Your data is processed by system; we do not collect that information.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Jonwork uses the camera only when you choose to attach a new photo to a conversation.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Jonwork. All rights reserved.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Jonwork uses your local network only when connecting to a workspace on your network.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Jonwork uses the microphone only when you choose to dictate a message. Audio is processed by Apple's speech recognition service.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Jonwork uses photo library access only when you choose to save an image.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Jonwork uses Apple's speech recognition service only when you choose to dictate a message.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -731,7 +725,7 @@
 				MARKETING_VERSION = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(inherited)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = YES;
+				REGISTER_APP_GROUPS = NO;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -787,19 +781,16 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "FlowDown/Resources/InfoPlist/Info-iOS.plist";
 				"INFOPLIST_FILE[sdk=macosx*]" = "FlowDown/Resources/InfoPlist/Info-Catalyst.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = FlowDown;
+				INFOPLIST_KEY_CFBundleDisplayName = Jonwork;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSCalendarsUsageDescription = "FlowDown requires calendar permissions to access your schedule information for features like suggesting available meeting times, scheduling appointments with contacts, and sending reminders for upcoming events. For example, when you ask \"Find a time for a team meeting next week,\" FlowDown will check your calendar to identify free slots. Your calendar data is only processed temporarily while answering your queries and is not stored by FlowDown. If you're using a cloud-based AI model, this data may be sent to your chosen service provider during processing.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "We use your camera to take picture. Your photo may be uploaded by your choice.";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025 FlowDown Team. All rights reserved.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FlowDown requires LAN access for interact with local service providers. We do not collect any information from your LAN";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "FlowDown requires location permissions to provide location-based assistance when you request it. For example, when you ask \"Find coffee shops near me\" or \"How long will it take to get to my next meeting,\" FlowDown will access your current location to provide relevant recommendations or travel times. Your location is only accessed when needed for specific requests and is not stored by FlowDown. This data may be sent to your chosen service provider if using a cloud-based AI model.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "We use your audio data for speech recognition. Your data is processed by system; we do not collect that information.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "FlowDown requires this permission to save image for you. Your data will be saved locally.";
-				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "FlowDown requires Reminders access so you can ask the assistant to create, view, change, complete, or delete your reminders. For example, when you ask \"Add buying milk to my reminders for tomorrow,\" FlowDown will write the reminder into your default Reminders list. Your reminders are only processed locally to fulfill the request and are not stored by FlowDown. If you're using a cloud-based AI model, the relevant reminder text may be sent to your chosen service provider during processing.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "We use your audio data for speech recognition. Your data is processed by system; we do not collect that information.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Jonwork uses the camera only when you choose to attach a new photo to a conversation.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Jonwork. All rights reserved.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Jonwork uses your local network only when connecting to a workspace on your network.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Jonwork uses the microphone only when you choose to dictate a message. Audio is processed by Apple's speech recognition service.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Jonwork uses photo library access only when you choose to save an image.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Jonwork uses Apple's speech recognition service only when you choose to dictate a message.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -814,9 +805,10 @@
 				LOCALIZED_STRING_SWIFTUI_SUPPORT = YES;
 				MARKETING_VERSION = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(inherited)";
+				PRODUCT_MODULE_NAME = Jonwork;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(inherited)";
-				REGISTER_APP_GROUPS = YES;
+				REGISTER_APP_GROUPS = NO;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -976,7 +968,7 @@
 				CURRENT_PROJECT_VERSION = "$(inherited)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FlowDownWidgets/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = FlowDownWidgets;
+				INFOPLIST_KEY_CFBundleDisplayName = "Jonwork Widgets";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -985,7 +977,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = "$(inherited)";
-				PRODUCT_BUNDLE_IDENTIFIER = wiki.qaq.flow.FlowDownWidgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonwork.ios.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -1009,7 +1001,7 @@
 				CURRENT_PROJECT_VERSION = "$(inherited)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FlowDownWidgets/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = FlowDownWidgets;
+				INFOPLIST_KEY_CFBundleDisplayName = "Jonwork Widgets";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1018,7 +1010,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = "$(inherited)";
-				PRODUCT_BUNDLE_IDENTIFIER = wiki.qaq.flow.FlowDownWidgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonwork.ios.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -1042,7 +1034,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = "$(inherited)";
-				PRODUCT_BUNDLE_IDENTIFIER = wiki.qaq.FlowDownUnitTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonwork.ios.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -1069,7 +1061,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = "$(inherited)";
-				PRODUCT_BUNDLE_IDENTIFIER = wiki.qaq.FlowDownUnitTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonwork.ios.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

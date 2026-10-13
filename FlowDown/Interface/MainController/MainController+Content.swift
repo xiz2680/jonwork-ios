@@ -57,6 +57,14 @@ extension MainController {
 
         setupChatSelectionSubscription()
 
+        #if !DEBUG
+            if let conversation = ConversationManager.shared.conversations.value.values.first(where: {
+                PiSessionCoordinator.shared.binding(for: $0.id) != nil
+            }) {
+                ChatSelection.shared.select(conversation.id)
+            }
+        #endif
+
         sidebar.newChatButton.delegate = self
         sidebar.snp.makeConstraints { make in
             make.edges.equalToSuperview()
@@ -111,9 +119,13 @@ extension MainController {
         Logger.ui.debugFile("load called with conversation: \(conv ?? "-1")")
         chatView.prepareForReuse()
         guard let identifier = conv else { return }
+        guard JonworkSurfacePolicy.permitsConversation(
+            hasJonworkBinding: PiSessionCoordinator.shared.binding(for: identifier) != nil
+        ) else { return }
 
         chatView.use(conversation: identifier)
 
+        guard PiSessionCoordinator.shared.binding(for: identifier) == nil else { return }
         let session = ConversationSessionManager.shared.session(for: identifier)
         session.updateModels()
     }

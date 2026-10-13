@@ -61,7 +61,8 @@ nonisolated extension AppEnvironment.Container {
         let storage = try Storage.db()
         let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
-        let shouldEnableCloudSync = SyncEngine.isCloudSyncSupported(containerIdentifier: CloudKitConfig.containerIdentifier)
+        // Jonwork sessions are authoritative on the connected workspace.
+        let shouldEnableCloudSync = false
         let shouldUseMockSync = isRunningTests || !shouldEnableCloudSync
         if !shouldEnableCloudSync || shouldUseMockSync {
             SyncEngine.setSyncEnabled(false)

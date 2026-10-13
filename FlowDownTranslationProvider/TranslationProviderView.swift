@@ -18,9 +18,9 @@ struct TranslationProviderView: View {
 
     let models: [CloudModel]
     @StateObject var translationModel = TranslationProviderModel()
-    @AppStorage("wiki.qaq.fd.tp.selectedModelIdentifier")
+    @AppStorage("com.jonwork.ios.translation.selectedModelIdentifier")
     var selectedModelIdentifier: CloudModel.ID = ""
-    @AppStorage("wiki.qaq.fd.tp.selectedLanguageHint")
+    @AppStorage("com.jonwork.ios.translation.selectedLanguageHint")
     var selectedLanguageHint: String = ""
     @State var translateOnAppear = true
 

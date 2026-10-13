@@ -1,3 +1,4 @@
+#if DEBUG
 //
 //  CreateNewConversationIntent.swift
 //  FlowDown
@@ -44,3 +45,4 @@ struct CreateNewConversationIntent: AppIntent {
         return .result(value: entity)
     }
 }
+#endif

@@ -42,15 +42,21 @@ extension MainController {
     }
 
     func queueNewConversation(text: String, shouldSend: Bool = false) {
-        Task { @MainActor in
-            let conversation = ConversationManager.shared.createNewConversation(autoSelect: true)
-            Logger.app.infoFile("created new conversation ID: \(conversation.id)")
-            guard shouldSend else { return }
-            try await Task.sleep(nanoseconds: 500_000_000)
-            if self.chatView.conversationIdentifier == conversation.id {
-                self.sendMessageToCurrentConversation(text)
+        #if DEBUG
+            Task { @MainActor in
+                let conversation = ConversationManager.shared.createNewConversation(autoSelect: true)
+                Logger.app.infoFile("created new conversation ID: \(conversation.id)")
+                guard shouldSend else { return }
+                try await Task.sleep(nanoseconds: 500_000_000)
+                if self.chatView.conversationIdentifier == conversation.id {
+                    self.sendMessageToCurrentConversation(text)
+                }
             }
-        }
+        #else
+            _ = text
+            _ = shouldSend
+            load(nil)
+        #endif
     }
 
     func scheduleWelcomeIfNeeded() {

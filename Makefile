@@ -14,6 +14,7 @@ XDG_CACHE_HOME := $(DERIVED_DATA)/xdg-cache
 MODULE_CACHE := $(DERIVED_DATA)/ModuleCache.noindex
 
 IOS_DESTINATION := generic/platform=iOS
+IOS_SIMULATOR_DESTINATION := generic/platform=iOS Simulator
 CATALYST_DESTINATION := generic/platform=macOS,variant=Mac Catalyst
 
 XCODEBUILD_WRAPPER := ./Resources/DevKit/scripts/run_xcodebuild.sh
@@ -32,8 +33,11 @@ XCODEBUILD := $(XCODEBUILD_WRAPPER) \
 
 LOCALIZATION_FILES := \
 	FlowDown/Resources/Localizable.xcstrings \
+	FlowDown/Resources/InfoPlist.xcstrings \
 	FlowDownTranslationProvider/Localizable.xcstrings \
-	FlowDownWidgets/Localizable.xcstrings
+	FlowDownTranslationProvider/InfoPlist.xcstrings \
+	FlowDownWidgets/Localizable.xcstrings \
+	FlowDownWidgets/InfoPlist.xcstrings
 
 ifeq ($(dirty),1)
 	export ALLOW_DIRTY := 1
@@ -52,7 +56,7 @@ define run-localization-script
 endef
 
 .PHONY: all help \
-	build build-ios build-catalyst build-extension \
+	build build-ios build-ios-simulator build-catalyst build-extension \
 	test test-unit test-online-e2e \
 	install-metal-toolchain package-resolve package-update scan-license \
 	localization-check localization-stale-check \
@@ -65,6 +69,7 @@ help:
 	@echo "Build:"
 	@echo "  build                 Build the iOS and Mac Catalyst app"
 	@echo "  build-ios             Build the iOS app"
+	@echo "  build-ios-simulator   Build the iOS Simulator app"
 	@echo "  build-catalyst        Build the Mac Catalyst app"
 	@echo "  build-extension       Build the translation provider extension"
 	@echo ""
@@ -103,6 +108,13 @@ build-ios:
 	$(BUILD_ENV) XCBUILD_LABEL=build-ios $(XCODEBUILD) \
 		-scheme $(IOS_SCHEME) \
 		-destination "$(IOS_DESTINATION)" \
+		build
+
+build-ios-simulator:
+	$(prepare-build-dirs)
+	$(BUILD_ENV) XCBUILD_LABEL=build-ios-simulator $(XCODEBUILD) \
+		-scheme $(IOS_SCHEME) \
+		-destination "$(IOS_SIMULATOR_DESTINATION)" \
 		build
 
 build-catalyst:

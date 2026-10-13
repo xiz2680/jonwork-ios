@@ -5,14 +5,58 @@ import Testing
 @Suite(.serialized)
 struct PiServiceTests {
     @Test
-    func `request uses bearer authentication and expected repository endpoint`() async throws {
-        let service = try makeService(token: "secret") { request in
-            #expect(request.url?.path == "/api/repos")
-            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer secret")
-            return (200, #"{"repos":["/repo"]}"#)
+    func `SSE parser accepts multiline data and CRLF framing`() throws {
+        var parser = PiSSERecordParser(maximumEventBytes: 64, maximumBufferedEventBytes: 128)
+        var event: PiSSERecord?
+        for byte in "id: 7\r\nevent: session.released\r\ndata: {\"type\":\r\ndata: \"session.released\"}\r\n\r\n".utf8 {
+            if let parsed = try parser.consume(byte) { event = parsed }
         }
 
-        #expect(try await service.listRepositories() == ["/repo"])
+        let record = try #require(event)
+        #expect(record.id == "7")
+        #expect(record.event == "session.released")
+        #expect(String(data: record.data, encoding: .utf8) == "{\"type\":\n\"session.released\"}")
+    }
+
+    @Test
+    func `SSE parser rejects an oversized event payload`() throws {
+        var parser = PiSSERecordParser(maximumEventBytes: 4, maximumBufferedEventBytes: 64)
+        #expect(throws: PiServiceError.eventTooLarge) {
+            for byte in "data: 12345\n".utf8 { _ = try parser.consume(byte) }
+        }
+    }
+
+    @Test
+    func `SSE parser rejects cumulative buffered event overflow`() throws {
+        var parser = PiSSERecordParser(maximumEventBytes: 4, maximumBufferedEventBytes: 8)
+        #expect(throws: PiServiceError.eventBufferOverflow) {
+            for byte in ":12345678".utf8 { _ = try parser.consume(byte) }
+        }
+    }
+
+    @Test
+    func `SSE parser resets buffered event budget after dispatch`() throws {
+        var parser = PiSSERecordParser(maximumEventBytes: 8, maximumBufferedEventBytes: 32)
+        var records: [PiSSERecord] = []
+        for byte in "id: 1\nevent: one\ndata: a\n\nid: 2\nevent: two\ndata: b\n\n".utf8 {
+            if let record = try parser.consume(byte) { records.append(record) }
+        }
+
+        #expect(records.map(\.id) == ["1", "2"])
+        #expect(records.map(\.event) == ["one", "two"])
+    }
+
+    @Test
+    func `request uses bearer authentication and expected repository endpoint`() async throws {
+        let service = try makeService(token: "secret") { request in
+            #expect(request.url?.path == "/v1/repositories")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer secret")
+            return (200, #"{"items":[{"id":"/repo","displayName":"Repo"}]}"#)
+        }
+
+        #expect(try await service.listRepositories() == [
+            PiGatewayWire.Repository(id: "/repo", displayName: "Repo"),
+        ])
     }
 
     @Test
@@ -59,7 +103,7 @@ struct PiServiceTests {
             Issue.record("Expected the request to fail")
         } catch let error as PiServiceError {
             #expect(error == .httpFailure(statusCode: 502))
-            #expect(error.localizedDescription == String(localized: "Pi could not complete the server request. Try again later."))
+            #expect(error.localizedDescription == String(localized: "Jonwork could not complete the request. Try again later."))
             #expect(error.redactedDiagnostic == "http_status_502")
             #expect(!error.localizedDescription.contains("super-secret"))
             #expect(!error.redactedDiagnostic.contains("private.example"))
@@ -75,13 +119,13 @@ struct PiServiceTests {
             Issue.record("Expected the request to fail")
         } catch let error as PiServiceError {
             #expect(error == .transportFailure(code: URLError.secureConnectionFailed.rawValue))
-            #expect(error.localizedDescription == String(localized: "Pi could not complete the connection. Check the server and try again."))
+            #expect(error.localizedDescription == String(localized: "Jonwork could not connect. Check your network and try again."))
             #expect(error.redactedDiagnostic == "transport_code_\(URLError.secureConnectionFailed.rawValue)")
         }
     }
 
     private func makeService(
-        token: String? = nil,
+        token: String? = "test-access-token",
         handler: @escaping @Sendable (URLRequest) throws -> (Int, String)
     ) throws -> PiService {
         PiURLProtocolStub.handler = handler

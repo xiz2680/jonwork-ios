@@ -6,12 +6,29 @@ import Testing
 @Suite(.serialized)
 struct ShortcutsScopeTests {
     @Test
+    func `production shortcut surface exposes only branded open app action`() {
+        #expect(Shortcuts.productionSurface == [.openApp])
+    }
+
+    @Test
+    func `production shortcut policy fails before invoking legacy work`() {
+        var invoked = false
+
+        #expect(throws: ShortcutError.unavailable) {
+            try ShortcutAvailability.performLegacyAction(enabled: false) {
+                invoked = true
+            }
+        }
+        #expect(!invoked)
+    }
+
+    @Test
     func `new conversation url encodes message content for shortcuts`() throws {
         let nilURL = try ShortcutUtilities.newConversationURL(initialMessage: nil)
         let encodedURL = try ShortcutUtilities.newConversationURL(initialMessage: "Hello/World?")
 
-        #expect(nilURL.absoluteString == "flowdown://new/%20")
-        #expect(encodedURL.absoluteString == "flowdown://new/Hello%2FWorld%3F")
+        #expect(nilURL.absoluteString == "jonwork://new/%20")
+        #expect(encodedURL.absoluteString == "jonwork://new/Hello%2FWorld%3F")
     }
 
     @Test
@@ -45,6 +62,7 @@ struct ShortcutsScopeTests {
     @Test
     func `shortcut related errors expose localized descriptions`() {
         let shortcutErrors: [ShortcutError] = [
+            .unavailable,
             .emptyMessage,
             .modelUnavailable,
             .emptyResponse,

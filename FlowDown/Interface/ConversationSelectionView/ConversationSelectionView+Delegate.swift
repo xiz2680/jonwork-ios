@@ -17,6 +17,10 @@ extension ConversationSelectionView: UITableViewDelegate {
 
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         guard let identifier = dataSource.itemIdentifier(for: indexPath) else { return nil }
+        guard JonworkSurfacePolicy.permitsLegacyConversationActions(
+            hasJonworkBinding: PiSessionCoordinator.shared.binding(for: identifier) != nil,
+            allowsLegacyConversations: allowsLegacyConversations
+        ) else { return nil }
 
         let duplicateAction = UIContextualAction(style: .normal, title: nil) { _, _, completion in
             if let duplicatedId = ConversationManager.shared.duplicateConversation(identifier: identifier) {
@@ -63,6 +67,10 @@ extension ConversationSelectionView: UITableViewDelegate {
         guard let identifier = dataSource.itemIdentifier(for: indexPath),
               let conversation = ConversationManager.shared.conversation(identifier: identifier)
         else { return nil }
+        guard JonworkSurfacePolicy.permitsLegacyConversationActions(
+            hasJonworkBinding: PiSessionCoordinator.shared.binding(for: identifier) != nil,
+            allowsLegacyConversations: allowsLegacyConversations
+        ) else { return nil }
 
         let isFavorite = conversation.isFavorite
         let imageName = isFavorite ? "star.slash" : "star"

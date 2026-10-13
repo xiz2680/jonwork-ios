@@ -1,3 +1,4 @@
+#if DEBUG
 import AppIntents
 import ChatClientKit
 import Foundation
@@ -248,3 +249,4 @@ enum ShortcutsEntities {
         }
     }
 }
+#endif

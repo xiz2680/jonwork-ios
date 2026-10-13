@@ -5,6 +5,15 @@ import Testing
 @Suite
 struct PiSessionReducerTests {
     @Test
+    func `tool detail is capped with an auditable truncation marker`() {
+        let detail = String(repeating: "x", count: PiSessionReducer.maximumToolDetailCharacters + 100)
+        let truncated = PiSessionReducer.truncateToolDetail(detail)
+
+        #expect(truncated.count == PiSessionReducer.maximumToolDetailCharacters)
+        #expect(truncated.hasSuffix(PiSessionReducer.toolDetailTruncationMarker))
+    }
+
+    @Test
     func `snapshot projects premium timeline content and ownership`() throws {
         var reducer = PiSessionReducer()
         reducer.reduce(try decode(

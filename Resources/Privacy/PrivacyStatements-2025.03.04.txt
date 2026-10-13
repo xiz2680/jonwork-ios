@@ -1,29 +1,9 @@
-# Privacy Policy
+# Jonwork Privacy Policy
 
-## Overview
+Jonwork stores app preferences and local conversation metadata on your device. Workspace credentials are stored in the Apple Keychain. The app does not include advertising, cross-app tracking, or third-party analytics SDKs.
 
-FlowDown respects your privacy and is committed to protecting your personal information. This privacy policy explains our data collection and processing practices.
+Messages, attachments, tool requests, and conversation controls are sent to the workspace service you connect to. Conversation sessions and results may be retained by that service, and relevant data may be processed by model or tool providers configured by the workspace operator.
 
-## FlowDown Team Privacy Policy
+If you use voice dictation, audio is processed by Apple's speech recognition service according to Apple's privacy policy.
 
-- **No Data Collection**: FlowDown developers do not collect, store, or transmit any of your personal information or usage data.
-- **All Data Stays Local**: All content and configurations you create remain entirely on your device.
-- **No Telemetry**: We do not track your usage, behavior patterns, or any other analytical data.
-- **No Crash Reports**: We do not collect crash reports or any diagnostic information.
-
-## Third-Party Services Privacy Policy
-
-- **Third-Party Data Processing**: When you use cloud model services, your data will be uploaded to your specified service provider for processing. These service providers may collect and process your data according to their privacy policies.
-- **OpenRouter Service**: FlowDown integrates OpenRouter services. Please refer to their privacy policy: [https://openrouter.ai/privacy](https://openrouter.ai/privacy)
-- **pollinations.ai**: FlowDown integrates PollinationsAI services. Please refer to their privacy policy: [https://pollinations.ai/](https://pollinations.ai/)
-- **Configuration Modifications**: If you modify the configurations yourself, please understand the associated risks and take responsibility for your choices.
-
-## Policy Updates
-
-We may update this privacy policy from time to time. Updates will be posted in the application or on our website.
-
-## Contact Us
-
-If you have any questions or suggestions regarding this privacy policy, please contact us through the application.
-
-_Last updated: March 3, 2025_
+Last updated: October 12, 2026

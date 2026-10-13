@@ -66,10 +66,32 @@ extension RichEditorView {
             delegate?.onRichEditorError(NSLocalizedString("Failed to process image.", comment: ""))
             return
         }
+        if let maximumBytes = jonworkAttachmentMaximumBytes,
+           attachment.imageRepresentation.count > maximumBytes
+        {
+            delegate?.onRichEditorError(String(localized: "The selected attachment is too large."))
+            return
+        }
         attachmentsBar.insert(item: attachment)
     }
 
     func process(file: URL) {
+        if let maximumBytes = jonworkAttachmentMaximumBytes {
+            do {
+                let values = try file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                guard values.isRegularFile == true,
+                      let fileSize = values.fileSize,
+                      fileSize >= 0,
+                      fileSize <= maximumBytes
+                else {
+                    delegate?.onRichEditorError(String(localized: "The selected attachment is too large."))
+                    return
+                }
+            } catch {
+                delegate?.onRichEditorError(error.localizedDescription)
+                return
+            }
+        }
         if let fileType = UTType(filenameExtension: file.pathExtension),
            fileType.conforms(to: .audio)
         {
@@ -571,7 +593,9 @@ extension RichEditorView: ControlPanel.Delegate {
     }
 
     func onControlPanelClose() {
-        quickSettingBar.show()
+        if !inputEditor.moreButton.isHidden {
+            quickSettingBar.show()
+        }
         inputEditor.isControlPanelOpened = false
     }
 }
@@ -617,7 +641,14 @@ extension RichEditorView.Object.Attachment {
                 storageSuffix: url.lastPathComponent,
             )
         } catch {
-            return nil
+            self.init(
+                type: .text,
+                name: file.lastPathComponent,
+                previewImage: .init(),
+                imageRepresentation: .init(),
+                textRepresentation: "",
+                storageSuffix: url.lastPathComponent,
+            )
         }
     }
 }

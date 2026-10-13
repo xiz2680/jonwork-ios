@@ -4,93 +4,94 @@
     "CFBundleDisplayName": {
       "comment": "Bundle display name",
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "FlowDownWidgets"
-          }
-        },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgets"
+            "value": "Jonwork Widgets"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jonwork Widgets"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgets"
+            "value": "Jonwork Widgets"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgets"
+            "value": "Jonwork Widgets"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgets"
+            "value": "Jonwork Widgets"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgets"
+            "value": "Jonwork Widgets"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgets"
+            "value": "Jonwork Widgets"
           }
         }
-      }
+      },
+      "shouldTranslate": false
     },
     "CFBundleName": {
       "comment": "Bundle name",
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "FlowDownWidgetsExtension"
-          }
-        },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgetsExtension"
+            "value": "JonworkWidgets"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JonworkWidgets"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgetsExtension"
+            "value": "JonworkWidgets"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgetsExtension"
+            "value": "JonworkWidgets"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgetsExtension"
+            "value": "JonworkWidgets"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgetsExtension"
+            "value": "JonworkWidgets"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "FlowDownWidgetsExtension"
+            "value": "JonworkWidgets"
           }
         }
       },
@@ -99,50 +100,51 @@
     "NSHumanReadableCopyright": {
       "comment": "Copyright (human-readable)",
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copyright © 2025 FlowDown Team. All rights reserved."
-          }
-        },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Urheberrecht © 2025 FlowDown Team. Alle Rechte vorbehalten."
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copyright © 2025 Equipo de FlowDown. Todos los derechos reservados."
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copyright © 2025 Équipe FlowDown. Tous droits réservés."
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "著作権 © 2025 FlowDown Team. 無断転載を禁じます。"
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "저작권 © 2025 FlowDown 팀. 모든 권리 보유."
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "© 2025 FlowDown 团队 版权所有"
+            "value": "Copyright © 2026 Jonwork. All rights reserved."
           }
         }
-      }
+      },
+      "shouldTranslate": false
     }
   },
-  "version": "1.1"
+  "version": "1.0"
 }
