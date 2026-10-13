@@ -173,18 +173,20 @@ struct PiProductionCompositionTests {
 
     @Test
     @MainActor
-    func `offline connection error is exposed to VoiceOver`() {
+    func `header actions expose offline recovery without a persistent status label`() {
         let statusView = PiSessionStatusView()
         let error = "The connection was interrupted."
 
         statusView.update(.init(conversation: .init(), connection: .offline(error)))
 
         #expect(!statusView.isAccessibilityElement)
-        #expect(statusView.statusLabel.isAccessibilityElement)
-        #expect(statusView.statusLabel.accessibilityLabel == String(localized: "Jonwork · Offline"))
-        #expect(statusView.statusLabel.accessibilityValue == error)
+        #expect(statusView.actionButton.accessibilityHint == error)
+        #expect(statusView.actionButton.isEnabled)
         #expect(statusView.actionButton.isAccessibilityElement)
         #expect(statusView.stopButton.isAccessibilityElement)
+        statusView.update(.init(conversation: .init(), connection: .connected))
+        #expect(statusView.actionButton.accessibilityHint == nil)
+        #expect(statusView.actionButton.isEnabled)
     }
 
     @Test

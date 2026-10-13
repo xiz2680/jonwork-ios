@@ -114,7 +114,7 @@ class ChatView: UIView {
     var editorApplyModelToDefault: Bool
 
     let title: TitleBar
-    let piStatusView = PiSessionStatusView()
+    var piStatusView: PiSessionStatusView { title.piControls }
     let jonworkUnavailableView = JonworkUnavailableView()
 
     var onCreateNewChat: (() -> Void)?
@@ -135,7 +135,6 @@ class ChatView: UIView {
         #endif
 
         addSubview(title)
-        addSubview(piStatusView)
 
         jonworkUnavailableView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
@@ -145,12 +144,6 @@ class ChatView: UIView {
             bringSubviewToFront(escapeButtonGlass)
         #endif
 
-        piStatusView.snp.makeConstraints { make in
-            make.top.equalTo(title.snp.bottom).offset(8)
-            make.centerX.equalToSuperview()
-            make.width.lessThanOrEqualToSuperview().inset(64)
-            make.height.greaterThanOrEqualTo(44)
-        }
         piStatusView.onStop = { [weak self] in
             guard let self, let conversationIdentifier else { return }
             Task { await self.performPiAction { try await PiSessionCoordinator.shared.abort(conversationID: conversationIdentifier) } }
@@ -374,9 +367,8 @@ class ChatView: UIView {
         guard let currentMessageListView else { return }
         let visibleEditorTop = min(editor.frame.minY, editorBackgroundView.frame.minY)
 
-        let headerBottom = piStatusView.isHidden ? title.frame.maxY : piStatusView.frame.maxY
         currentMessageListView.contentSafeAreaInsets = .init(
-            top: headerBottom + 16,
+            top: title.frame.maxY + 16,
             left: 0,
             bottom: bounds.height - visibleEditorTop + 16,
             right: 0,
@@ -466,7 +458,11 @@ class ChatView: UIView {
     private func buildPiSessionMenu(viewState: PiSessionCoordinator.ViewState) -> UIMenu {
         guard let conversationIdentifier else { return UIMenu() }
         if viewState.connection != .connected {
-            return UIMenu(title: String(localized: "Conversation"), children: [
+            var recoveryActions: [UIMenuElement] = []
+            if case let .offline(message) = viewState.connection, !message.isEmpty {
+                recoveryActions.append(UIAction(title: message, attributes: .disabled) { _ in })
+            }
+            recoveryActions.append(
                 UIAction(
                     title: String(localized: "Retry"),
                     image: UIImage(systemName: "arrow.clockwise")
@@ -474,8 +470,9 @@ class ChatView: UIView {
                     Task { @MainActor in
                         PiSessionCoordinator.shared.reconnect(conversationID: conversationIdentifier)
                     }
-                },
-            ])
+                }
+            )
+            return UIMenu(title: String(localized: "Conversation"), children: recoveryActions)
         }
         let state = viewState.conversation
         var actions: [UIMenuElement] = []
@@ -683,6 +680,9 @@ extension ChatView {
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
 
+        let piControls = PiSessionStatusView()
+        private var legacyMenuContainer: UIView?
+
         let menuButton = EasyMenuButton().with {
             var config = UIButton.Configuration.plain()
             config.image = UIImage(systemName: "chevron.down")
@@ -732,6 +732,11 @@ extension ChatView {
                 addSubview(icon)
                 addSubview(textLabel)
                 addSubview(menuButton)
+                addSubview(piControls)
+                piControls.snp.makeConstraints { make in
+                    make.centerY.equalToSuperview()
+                    make.trailing.equalToSuperview().inset(12)
+                }
 
                 icon.snp.makeConstraints { make in
                     make.centerY.equalToSuperview()
@@ -744,6 +749,7 @@ extension ChatView {
                     make.bottom.lessThanOrEqualToSuperview()
                     make.left.greaterThanOrEqualTo(icon.snp.right).offset(8)
                     make.right.lessThanOrEqualTo(menuButton.snp.left).offset(-8)
+                    make.right.lessThanOrEqualTo(piControls.snp.left).offset(-8)
                 }
                 menuButton.snp.makeConstraints { make in
                     make.centerY.equalToSuperview()
@@ -758,8 +764,14 @@ extension ChatView {
 
                 backgroundContainer.contentView.addSubview(icon)
                 backgroundContainer.contentView.addSubview(textLabel)
+                backgroundContainer.contentView.addSubview(piControls)
+                piControls.snp.makeConstraints { make in
+                    make.centerY.equalToSuperview()
+                    make.trailing.equalToSuperview().inset(12)
+                }
 
                 let menuButtonGlass = menuButton.wrappedInGlassEffect(cornerStyle: .capsule)
+                legacyMenuContainer = menuButtonGlass
                 backgroundContainer.contentView.addSubview(menuButtonGlass)
 
                 menuButtonGlass.snp.makeConstraints { make in
@@ -780,6 +792,7 @@ extension ChatView {
                     make.bottom.lessThanOrEqualToSuperview()
                     make.left.greaterThanOrEqualTo(icon.snp.right).offset(8)
                     make.right.lessThanOrEqualTo(menuButtonGlass.snp.left).offset(-8)
+                    make.right.lessThanOrEqualTo(piControls.snp.left).offset(-8)
                 }
 
                 icon.alpha = 0
@@ -891,6 +904,7 @@ extension ChatView {
                 hasJonworkBinding: PiSessionCoordinator.shared.binding(for: identifier) != nil,
                 allowsLegacyConversations: allowsLegacyConversations
             )
+            legacyMenuContainer?.isHidden = menuButton.isHidden
             doWithAnimation {
                 self.textLabel.text = conversation?.title ?? String(localized: "Untitled")
             }

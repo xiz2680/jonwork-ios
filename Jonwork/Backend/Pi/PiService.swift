@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OSLog
 
 struct PiServerConfiguration: Equatable, Sendable {
     let baseURL: URL
@@ -512,6 +513,9 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
                 for: request,
                 maximumBodyBytes: maximumBodyBytes
             )
+            if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+                Logger(subsystem: "com.jonwork.ios", category: "PiGatewayTransport").error("Gateway request rejected: discovery=\(path == ".well-known/pi-gateway", privacy: .public), status=\(http.statusCode, privacy: .public)")
+            }
             try Self.validate(response: response, data: data, path: path)
             guard response.mimeType == "application/json" || response.mimeType?.hasSuffix("+json") == true else {
                 throw PiServiceError.invalidResponse

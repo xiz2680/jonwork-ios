@@ -17,6 +17,9 @@ DERIVED_DATA ?= /private/tmp/jonwork-deriveddata
 BUILD_HOME := $(DERIVED_DATA)/home
 XDG_CACHE_HOME := $(DERIVED_DATA)/xdg-cache
 MODULE_CACHE := $(DERIVED_DATA)/ModuleCache.noindex
+UNSIGNED_FLAGS := CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+SIMULATOR_SIGNING_FLAGS := CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual
+SIGNING_FLAGS ?= $(UNSIGNED_FLAGS)
 
 IOS_DESTINATION := generic/platform=iOS
 IOS_SIMULATOR_DESTINATION := generic/platform=iOS Simulator
@@ -32,9 +35,7 @@ XCODEBUILD = $(XCODEBUILD_WRAPPER) \
 	-derivedDataPath "$(DERIVED_DATA)" \
 	-skipMacroValidation \
 	-skipPackagePluginValidation \
-	CODE_SIGNING_ALLOWED=NO \
-	CODE_SIGNING_REQUIRED=NO \
-	CODE_SIGN_IDENTITY="" \
+	$(SIGNING_FLAGS) \
 	$(XCODEBUILD_EXTRA)
 
 LOCALIZATION_FILES := \
@@ -131,6 +132,7 @@ build-ios-qa:
 build-ios-candidate:
 	$(MAKE) build-ios CONFIGURATION=ProductionCandidate
 
+build-ios-simulator: SIGNING_FLAGS = $(SIMULATOR_SIGNING_FLAGS)
 build-ios-simulator:
 	$(prepare-build-dirs)
 	$(BUILD_ENV) XCBUILD_LABEL=build-ios-simulator $(XCODEBUILD) \
@@ -155,6 +157,9 @@ build-extension:
 
 test: test-unit
 
+# The default test destination is a simulator. Explicit hardware/Mac targets
+# retain their existing unsigned checks unless the caller supplies signing flags.
+test-unit: SIGNING_FLAGS = $(if $(strip $(TEST_DESTINATION)),$(if $(findstring platform=iOS Simulator,$(TEST_DESTINATION)),$(SIMULATOR_SIGNING_FLAGS),$(UNSIGNED_FLAGS)),$(SIMULATOR_SIGNING_FLAGS))
 test-unit:
 	$(prepare-build-dirs)
 	DESTINATION="$(TEST_DESTINATION)"; \
@@ -162,7 +167,7 @@ test-unit:
 	$(BUILD_ENV) XCBUILD_LABEL=test-unit $(XCODEBUILD) \
 		-scheme $(IOS_SCHEME) \
 		-destination "$$DESTINATION" \
-		$(if $(TEST_ONLY),-only-testing:$(TEST_ONLY)) \
+		$(foreach selected_test,$(TEST_ONLY),-only-testing:$(selected_test)) \
 		test
 
 test-online-e2e:
