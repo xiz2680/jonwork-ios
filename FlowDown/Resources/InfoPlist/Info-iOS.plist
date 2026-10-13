@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>JonworkGatewayBaseURL</key>
+	<string>$(JONWORK_GATEWAY_BASE_URL)</string>
+	<key>JonworkGatewayEnvironment</key>
+	<string>$(JONWORK_GATEWAY_ENVIRONMENT)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleAllowMixedLocalizations</key>

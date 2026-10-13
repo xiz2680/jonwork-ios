@@ -1,0 +1,6 @@
+#include "Release.xcconfig"
+
+JONWORK_GATEWAY_ENVIRONMENT = production-candidate;
+JONWORK_GATEWAY_BASE_URL = https:/$()/candidate.agent.jonwork.com;
+
+#include? "ProductionCandidateDeveloper.xcconfig"

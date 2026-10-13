@@ -9,7 +9,8 @@
 
 CLOUDKIT_CONTAINER_ENVIRONMENT = Development;
 APS_ENVIRONMENT = development;
+JONWORK_GATEWAY_ENVIRONMENT = debug;
+JONWORK_GATEWAY_BASE_URL = https:/$()/debug.agent.jonwork.com;
 
 #include? "Developer.xcconfig"
 #include? "DevelopmentDeveloper.xcconfig"
-

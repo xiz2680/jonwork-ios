@@ -99,21 +99,17 @@ struct PiServerProfileStoreTests {
     func `workspace screen exposes sign out without revealing credentials`() async throws {
         let context = makeContext()
         defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
-        let url = try #require(URL(string: "https://pi.example.test"))
+        let configuration = try gatewayConfiguration(.production)
+        let url = configuration.baseURL
         try context.store.save(baseURL: url, token: "secret")
         let controller = SettingController.SettingContent.PiServerController(
             profileStore: context.store,
+            gatewayConfiguration: configuration,
             autoConnect: false
         )
         controller.loadViewIfNeeded()
 
         #expect(controller.tableView(controller.tableView, numberOfRowsInSection: 0) == 2)
-        #expect(SettingController.SettingContent.PiServerController.defaultBaseURL.absoluteString == "https://agent.jonwork.com")
-        let defaultBaseURL = SettingController.SettingContent.PiServerController.connectionBaseURL(savedProfile: nil)
-        #expect(defaultBaseURL.absoluteString == "https://agent.jonwork.com")
-        #expect(SettingController.SettingContent.PiServerController.connectionBaseURL(
-            savedProfile: PiServerProfile(baseURL: url, token: nil)
-        ) == url)
 
         let signInCell = controller.tableView(
             controller.tableView,
@@ -132,6 +128,57 @@ struct PiServerProfileStoreTests {
         await controller.removeSavedToken()
         #expect(!controller.hasSavedToken)
         #expect(try context.store.load()?.token == nil)
+    }
+
+    @Test
+    func `bundled deployment configurations select isolated gateway domains`() throws {
+        for environment in PiGatewayDeploymentConfiguration.Environment.allCases {
+            let configuration = try gatewayConfiguration(environment)
+            #expect(configuration.environment == environment)
+            #expect(configuration.baseURL == environment.requiredBaseURL)
+        }
+        #expect(PiGatewayDeploymentConfiguration.Environment.production.requiredBaseURL !=
+            PiGatewayDeploymentConfiguration.Environment.productionCandidate.requiredBaseURL)
+    }
+
+    @Test
+    func `test host carries the Debug Gateway configuration`() {
+        #expect(PiGatewayDeploymentConfiguration.live.environment == .debug)
+        #expect(PiGatewayDeploymentConfiguration.live.baseURL ==
+            PiGatewayDeploymentConfiguration.Environment.debug.requiredBaseURL)
+    }
+
+    @Test
+    func `deployment configuration rejects a domain belonging to another environment`() throws {
+        let info: [String: Any] = [
+            PiGatewayDeploymentConfiguration.environmentInfoKey: "production-candidate",
+            PiGatewayDeploymentConfiguration.baseURLInfoKey: "https://agent.jonwork.com",
+        ]
+        #expect(throws: PiGatewayDeploymentConfigurationError.environmentURLMismatch) {
+            try PiGatewayDeploymentConfiguration.resolve(infoDictionary: info)
+        }
+    }
+
+    @Test
+    func `deployment configuration rejects insecure transport`() throws {
+        let info: [String: Any] = [
+            PiGatewayDeploymentConfiguration.environmentInfoKey: "qa",
+            PiGatewayDeploymentConfiguration.baseURLInfoKey: "http://qa.agent.jonwork.com",
+        ]
+        #expect(throws: PiGatewayDeploymentConfigurationError.invalidBaseURL) {
+            try PiGatewayDeploymentConfiguration.resolve(infoDictionary: info)
+        }
+    }
+
+    @Test
+    func `candidate deployment rejects persisted production profile`() throws {
+        let candidate = try gatewayConfiguration(.productionCandidate)
+        let productionProfile = PiServerProfile(
+            baseURL: PiGatewayDeploymentConfiguration.Environment.production.requiredBaseURL,
+            token: "not-used"
+        )
+        #expect(!candidate.accepts(productionProfile))
+        #expect(candidate.accepts(PiServerProfile(baseURL: candidate.baseURL, token: nil)))
     }
 
     @Test
@@ -406,6 +453,15 @@ struct PiServerProfileStoreTests {
             suiteName
         )
     }
+}
+
+private func gatewayConfiguration(
+    _ environment: PiGatewayDeploymentConfiguration.Environment
+) throws -> PiGatewayDeploymentConfiguration {
+    try PiGatewayDeploymentConfiguration.resolve(infoDictionary: [
+        PiGatewayDeploymentConfiguration.environmentInfoKey: environment.rawValue,
+        PiGatewayDeploymentConfiguration.baseURLInfoKey: environment.requiredBaseURL.absoluteString,
+    ])
 }
 
 private final class ControlledRefreshAuthorizer: PiOAuthAuthorizing, @unchecked Sendable {

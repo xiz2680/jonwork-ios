@@ -124,6 +124,17 @@ struct PiServiceTests {
         }
     }
 
+    @Test
+    func `TLS trust failure is rejected as a typed transport error`() async throws {
+        let service = try makeService { _ in throw URLError(.serverCertificateUntrusted) }
+
+        await #expect(throws: PiServiceError.transportFailure(
+            code: URLError.serverCertificateUntrusted.rawValue
+        )) {
+            try await service.listRepositories()
+        }
+    }
+
     private func makeService(
         token: String? = "test-access-token",
         handler: @escaping @Sendable (URLRequest) throws -> (Int, String)

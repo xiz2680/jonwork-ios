@@ -5,12 +5,6 @@ import UIKit
 
 extension SettingController.SettingContent {
     final class PiServerController: UITableViewController {
-        static let defaultBaseURL = URL(string: "https://agent.jonwork.com")!
-
-        static func connectionBaseURL(savedProfile: PiServerProfile?) -> URL {
-            savedProfile?.baseURL ?? defaultBaseURL
-        }
-
         private enum Section: Int, CaseIterable {
             case connection
             case repositories
@@ -18,6 +12,7 @@ extension SettingController.SettingContent {
         }
 
         private let domainCoordinator: PiServerDomainCoordinator
+        private let gatewayConfiguration: PiGatewayDeploymentConfiguration
         private let autoConnect: Bool
         private let clientID = UUID().uuidString
         private var repositories: [PiRepositoryPresentation] = []
@@ -32,8 +27,13 @@ extension SettingController.SettingContent {
             self?.view.window ?? ASPresentationAnchor()
         }
 
-        init(profileStore: PiServerProfileStore = PiServerProfileStore(), autoConnect: Bool = true) {
+        init(
+            profileStore: PiServerProfileStore = PiServerProfileStore(),
+            gatewayConfiguration: PiGatewayDeploymentConfiguration = .live,
+            autoConnect: Bool = true
+        ) {
             domainCoordinator = PiServerDomainCoordinator(profileStore: profileStore)
+            self.gatewayConfiguration = gatewayConfiguration
             self.autoConnect = autoConnect
             super.init(style: .insetGrouped)
             title = String(localized: "Jonwork Workspace")
@@ -49,7 +49,7 @@ extension SettingController.SettingContent {
             tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
             navigationItem.largeTitleDisplayMode = .never
             do {
-                if try domainCoordinator.savedProfile() != nil {
+                if gatewayConfiguration.accepts(try domainCoordinator.savedProfile()) {
                     hasSavedToken = try domainCoordinator.hasSavedCredentials()
                     if autoConnect { startConnect() }
                 }
@@ -176,7 +176,7 @@ extension SettingController.SettingContent {
         private func connect() async {
             guard !isLoading, !isSigningOut else { return }
             do {
-                let url = Self.connectionBaseURL(savedProfile: try domainCoordinator.savedProfile())
+                let url = gatewayConfiguration.baseURL
                 setLoading(true)
                 defer { setLoading(false) }
                 let presentation = try await domainCoordinator.authenticate(baseURL: url, authorizer: oauthClient)

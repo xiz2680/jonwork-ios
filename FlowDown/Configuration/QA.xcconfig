@@ -1,0 +1,6 @@
+#include "Development.xcconfig"
+
+JONWORK_GATEWAY_ENVIRONMENT = qa;
+JONWORK_GATEWAY_BASE_URL = https:/$()/qa.agent.jonwork.com;
+
+#include? "QADeveloper.xcconfig"

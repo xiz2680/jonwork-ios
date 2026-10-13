@@ -56,7 +56,7 @@ define run-localization-script
 endef
 
 .PHONY: all help \
-	build build-ios build-ios-simulator build-catalyst build-extension \
+	build build-ios build-ios-qa build-ios-candidate build-ios-simulator build-catalyst build-extension \
 	test test-unit test-online-e2e \
 	install-metal-toolchain package-resolve package-update scan-license \
 	localization-check localization-stale-check \
@@ -69,6 +69,8 @@ help:
 	@echo "Build:"
 	@echo "  build                 Build the iOS and Mac Catalyst app"
 	@echo "  build-ios             Build the iOS app"
+	@echo "  build-ios-qa          Build the QA iOS app"
+	@echo "  build-ios-candidate   Build the production-candidate iOS app"
 	@echo "  build-ios-simulator   Build the iOS Simulator app"
 	@echo "  build-catalyst        Build the Mac Catalyst app"
 	@echo "  build-extension       Build the translation provider extension"
@@ -109,6 +111,12 @@ build-ios:
 		-scheme $(IOS_SCHEME) \
 		-destination "$(IOS_DESTINATION)" \
 		build
+
+build-ios-qa:
+	$(MAKE) build-ios CONFIGURATION=QA
+
+build-ios-candidate:
+	$(MAKE) build-ios CONFIGURATION=ProductionCandidate
 
 build-ios-simulator:
 	$(prepare-build-dirs)
