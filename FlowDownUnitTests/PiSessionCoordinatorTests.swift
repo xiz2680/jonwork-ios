@@ -210,6 +210,161 @@ struct PiSessionCoordinatorTests {
 
     @Test
     @MainActor
+    func `set model remains pending until matching operation settles and snapshot confirms`() async throws {
+        let stream = ControlledEventStream()
+        let model = attachmentModel()
+        let service = PiServiceSpy(
+            snapshots: [
+                snapshot(title: "Before", message: "before"),
+                snapshot(
+                    title: "After", message: "after", revision: 2,
+                    model: .init(provider: model.provider, id: model.id)
+                ),
+            ],
+            streams: [stream.stream],
+            models: [model]
+        )
+        let (coordinator, defaults) = makeCoordinator(service: service) { _, _ in }
+        defer {
+            coordinator.unbind(conversationID: "conversation")
+            defaults.removePersistentDomain(forName: defaultsSuite)
+        }
+        bind(coordinator, conversationID: "conversation", sessionID: "session", clientID: "controller")
+        try await waitUntil { service.eventClientIDs == ["controller"] }
+        stream.yield(controllerEvent(id: "1", clientID: "controller"))
+        try await waitUntil { coordinator.viewState(for: "conversation")?.conversation.role == .controller }
+
+        var completed = false
+        let mutation = Task {
+            try await coordinator.setModel(provider: model.provider, modelID: model.id, conversationID: "conversation")
+            completed = true
+        }
+        try await waitUntil { service.commands.count == 1 }
+        #expect(coordinator.viewState(for: "conversation")?.pendingAction == .other)
+        #expect(!completed)
+        #expect(service.stateCallCount == 1)
+
+        stream.yield(operationAcceptedEvent(id: "2", operationID: "operation", command: "set_model"))
+        stream.yield(operationSettledEvent(id: "3", operationID: "operation", status: "completed"))
+        try await mutation.value
+
+        #expect(completed)
+        #expect(service.stateCallCount == 2)
+        #expect(coordinator.viewState(for: "conversation")?.conversation.model?.id == model.id)
+        #expect(coordinator.viewState(for: "conversation")?.pendingAction == nil)
+    }
+
+    @Test
+    @MainActor
+    func `set thinking remains pending and failed settlement does not fetch optimistic snapshot`() async throws {
+        let stream = ControlledEventStream()
+        let model = reasoningModel()
+        let service = PiServiceSpy(
+            snapshots: [snapshot(
+                title: "Thinking", message: "before",
+                model: .init(provider: model.provider, id: model.id)
+            )],
+            streams: [stream.stream],
+            models: [model]
+        )
+        let (coordinator, defaults) = makeCoordinator(service: service) { _, _ in }
+        defer {
+            coordinator.unbind(conversationID: "conversation")
+            defaults.removePersistentDomain(forName: defaultsSuite)
+        }
+        bind(coordinator, conversationID: "conversation", sessionID: "session", clientID: "controller")
+        try await waitUntil { service.eventClientIDs == ["controller"] }
+        stream.yield(controllerEvent(id: "1", clientID: "controller"))
+        try await waitUntil { coordinator.viewState(for: "conversation")?.conversation.role == .controller }
+
+        let mutation = Task {
+            try await coordinator.setThinkingLevel(.high, conversationID: "conversation")
+        }
+        try await waitUntil { service.commands.count == 1 }
+        #expect(coordinator.viewState(for: "conversation")?.pendingAction == .other)
+        stream.yield(operationAcceptedEvent(id: "2", operationID: "operation", command: "set_thinking_level"))
+        stream.yield(operationSettledEvent(id: "3", operationID: "operation", status: "failed"))
+
+        await #expect(throws: PiServiceError.gateway(code: "operation_failed", retryable: true)) {
+            try await mutation.value
+        }
+        #expect(service.stateCallCount == 1)
+        #expect(coordinator.viewState(for: "conversation")?.conversation.thinkingLevel == "off")
+    }
+
+    @Test
+    @MainActor
+    func `configuration timeout keeps durable receipt and does not apply an optimistic snapshot`() async throws {
+        let stream = ControlledEventStream()
+        let store = InMemoryPendingMutationStore()
+        let model = reasoningModel()
+        let service = PiServiceSpy(
+            snapshots: [snapshot(
+                title: "Thinking", message: "before",
+                model: .init(provider: model.provider, id: model.id)
+            )],
+            streams: [stream.stream], models: [model],
+            discovery: testDiscovery(mutationTimeoutMs: 40)
+        )
+        let (coordinator, defaults) = makeCoordinator(service: service, pendingStore: store) { _, _ in }
+        defer {
+            coordinator.unbind(conversationID: "conversation")
+            defaults.removePersistentDomain(forName: defaultsSuite)
+        }
+        bind(coordinator, conversationID: "conversation", sessionID: "session", clientID: "controller")
+        try await waitUntil { service.eventClientIDs == ["controller"] }
+        stream.yield(controllerEvent(id: "1", clientID: "controller"))
+        try await waitUntil { coordinator.viewState(for: "conversation")?.conversation.role == .controller }
+
+        await #expect(throws: PiServiceError.timedOut) {
+            try await coordinator.setThinkingLevel(.high, conversationID: "conversation")
+        }
+
+        #expect(service.stateCallCount == 1)
+        #expect(store.mutations["conversation"]?.receipt?.operationId == "operation")
+        #expect(coordinator.viewState(for: "conversation")?.conversation.thinkingLevel == "off")
+    }
+
+    @Test
+    @MainActor
+    func `configuration settlement replay survives reconnect before authoritative confirmation`() async throws {
+        let firstStream = ControlledEventStream()
+        let replayStream = ControlledEventStream()
+        let model = attachmentModel()
+        let confirmed = snapshot(
+            title: "Confirmed", message: "after", revision: 2, lastEventID: "3",
+            model: .init(provider: model.provider, id: model.id)
+        )
+        let service = PiServiceSpy(
+            snapshots: [snapshot(title: "Before", message: "before"), confirmed, confirmed],
+            streams: [firstStream.stream, replayStream.stream], models: [model]
+        )
+        let (coordinator, defaults) = makeCoordinator(service: service) { _, _ in }
+        defer {
+            coordinator.unbind(conversationID: "conversation")
+            defaults.removePersistentDomain(forName: defaultsSuite)
+        }
+        bind(coordinator, conversationID: "conversation", sessionID: "session", clientID: "controller")
+        try await waitUntil { service.eventClientIDs == ["controller"] }
+        firstStream.yield(controllerEvent(id: "1", clientID: "controller"))
+        try await waitUntil { coordinator.viewState(for: "conversation")?.conversation.role == .controller }
+
+        let mutation = Task {
+            try await coordinator.setModel(provider: model.provider, modelID: model.id, conversationID: "conversation")
+        }
+        try await waitUntil { service.commands.count == 1 }
+        firstStream.finish(throwing: PiServiceError.connectionLost)
+        try await waitUntil { service.eventClientIDs.count == 2 }
+        replayStream.yield(operationAcceptedEvent(id: "2", operationID: "operation", command: "set_model"))
+        replayStream.yield(operationSettledEvent(id: "3", operationID: "operation", status: "completed"))
+        try await mutation.value
+
+        #expect(service.stateCallCount == 3)
+        #expect(coordinator.viewState(for: "conversation")?.conversation.model?.id == model.id)
+    }
+
+    @Test
+    @MainActor
     func `viewer cannot send or abort through coordinator`() async throws {
         let stream = ControlledEventStream()
         let service = PiServiceSpy(
@@ -742,19 +897,22 @@ private func snapshot(
     message: String,
     sessionID: String = "session",
     revision: Int = 1,
+    lastEventID: String = "0",
     streaming: Bool = false,
-    model: PiGatewayWire.Snapshot.Configuration.Model? = nil
+    model: PiGatewayWire.Snapshot.Configuration.Model? = nil,
+    thinkingLevel: PiGatewayWire.ThinkingLevel = .off
 ) -> PiGatewayWire.Snapshot {
     PiGatewayWire.Snapshot(
         contract: PiGatewayWire.contract,
         sessionId: sessionID,
         repositoryId: "/repo",
         revision: revision,
-        lastEventId: "0",
+        lastEventId: lastEventID,
+        lifecycle: .idle,
         runtime: .running,
         run: .init(status: streaming ? .running : .idle, operationId: streaming ? "operation-active" : nil),
         controller: .init(clientId: nil, leaseExpiresAt: nil),
-        configuration: .init(model: model, thinkingLevel: .off),
+        configuration: .init(model: model, thinkingLevel: thinkingLevel),
         messages: [.init(
             id: "message",
             role: .assistant,
@@ -769,7 +927,20 @@ private func attachmentModel() -> PiGatewayWire.Model {
     .init(
         provider: "test", id: "vision", name: "Vision", reasoning: false,
         input: [.text, .image], thinkingLevels: [.off], contextWindow: nil,
-        maxOutputTokens: nil
+        maxOutputTokens: nil,
+        attachments: .init(
+            supported: true, kinds: [.image], mediaTypes: ["image/png"],
+            maxBytes: 1_000_000, maxCount: 4
+        )
+    )
+}
+
+private func reasoningModel() -> PiGatewayWire.Model {
+    .init(
+        provider: "test", id: "reasoning", name: "Reasoning", reasoning: true,
+        input: [.text], thinkingLevels: [.off, .high], contextWindow: nil,
+        maxOutputTokens: nil,
+        attachments: .init(supported: false, kinds: [], mediaTypes: [], maxBytes: 0, maxCount: 0)
     )
 }
 
@@ -786,10 +957,11 @@ private func uploadedAttachment(id: String, name: String, data: Data) -> PiGatew
     )
 }
 
-private func testDiscovery() -> PiGatewayWire.Discovery {
+private func testDiscovery(mutationTimeoutMs: Int = 1_000) -> PiGatewayWire.Discovery {
     .init(
         contract: PiGatewayWire.contract,
         apiVersion: "1.0",
+        compatibility: .init(minimumApiVersion: "1.0", maximumApiVersion: "1.0"),
         authentication: .init(
             type: "oauth2_authorization_code",
             clientId: "pi-ios",
@@ -802,17 +974,23 @@ private func testDiscovery() -> PiGatewayWire.Discovery {
             refreshTokenRotation: "required"
         ),
         capabilities: .init(
-            repositories: true, models: true, thinking: true, sessions: true, commands: true,
+            repositories: true, models: true, thinking: true, sessions: true,
+            sessionSearch: true, sessionDelete: true, commands: true,
             sse: true, authoritativeSnapshot: true, eventIds: true, replay: true, idempotency: true,
             singleWriter: true, takeover: true, release: true, abort: true, retry: true,
-            attachments: .init(images: true, files: true)
+            attachments: .init(
+                images: true, files: false,
+                sources: [.photoLibrary, .camera, .filePicker],
+                mediaTypes: ["image/png"],
+                modelCompatibilityField: "attachments.supported"
+            )
         ),
         limits: .init(
-            readTimeoutMs: 1_000, mutationTimeoutMs: 1_000, sseConnectTimeoutMs: 1_000,
+            readTimeoutMs: 1_000, mutationTimeoutMs: mutationTimeoutMs, sseConnectTimeoutMs: 1_000,
             replayRetentionEvents: 100, replayRetentionSeconds: 100,
             idempotencyRetentionSeconds: 86_400, attachmentMaxBytes: 1_000_000,
             attachmentTotalBytes: 2_000_000, attachmentsPerPrompt: 4, attachmentUploadTimeoutMs: 1_000,
-            attachmentDownloadTimeoutMs: 1_000, attachmentMediaTypes: ["image/png", "application/octet-stream"],
+            attachmentDownloadTimeoutMs: 1_000, attachmentMediaTypes: ["image/png"],
             attachmentDigestAlgorithm: "sha-256"
         )
     )
@@ -821,6 +999,19 @@ private func testDiscovery() -> PiGatewayWire.Discovery {
 private func controllerEvent(id: String, clientID: String?) -> PiGatewayWire.Event {
     let controller = clientID.map { #""\#($0)""# } ?? "null"
     let json = #"{"contract":"pi-gateway/1.0","id":"\#(id)","sessionId":"session","sessionRevision":1,"occurredAt":"2026-10-13T08:00:00.000Z","type":"controller.changed","data":{"previousControllerClientId":null,"controllerClientId":\#(controller),"reason":"takeover"}}"#
+    return try! JSONDecoder.piGateway.decode(PiGatewayWire.Event.self, from: Data(json.utf8))
+}
+
+private func operationAcceptedEvent(id: String, operationID: String, command: String) -> PiGatewayWire.Event {
+    let json = #"{"contract":"pi-gateway/1.0","id":"\#(id)","sessionId":"session","sessionRevision":2,"occurredAt":"2026-10-13T08:00:00.000Z","type":"operation.accepted","data":{"operationId":"\#(operationID)","command":"\#(command)","retryOfOperationId":null}}"#
+    return try! JSONDecoder.piGateway.decode(PiGatewayWire.Event.self, from: Data(json.utf8))
+}
+
+private func operationSettledEvent(id: String, operationID: String, status: String) -> PiGatewayWire.Event {
+    let error = status == "failed"
+        ? #"{"code":"operation_failed","message":"Operation failed","retryable":true}"#
+        : "null"
+    let json = #"{"contract":"pi-gateway/1.0","id":"\#(id)","sessionId":"session","sessionRevision":2,"occurredAt":"2026-10-13T08:00:00.100Z","type":"operation.settled","data":{"operationId":"\#(operationID)","status":"\#(status)","retryOfOperationId":null,"error":\#(error)}}"#
     return try! JSONDecoder.piGateway.decode(PiGatewayWire.Event.self, from: Data(json.utf8))
 }
 
@@ -856,6 +1047,10 @@ private final class ControlledEventStream: @unchecked Sendable {
     func yield(_ event: PiGatewayWire.Event) {
         continuation.yield(event)
     }
+
+    func finish(throwing error: Error? = nil) {
+        if let error { continuation.finish(throwing: error) } else { continuation.finish() }
+    }
 }
 
 private final class PiServiceSpy: PiServiceProtocol, @unchecked Sendable {
@@ -870,27 +1065,32 @@ private final class PiServiceSpy: PiServiceProtocol, @unchecked Sendable {
     private var contexts: [PiMutationContext] = []
     private var receiptResults: [Result<PiGatewayWire.MutationReceiptLookup, Error>] = []
     private var availableModelValues: [PiGatewayWire.Model]
+    private let discoveryValue: PiGatewayWire.Discovery
     private var uploadResults: [Result<PiGatewayWire.Attachment, Error>] = []
     private var recordedUploadKeys: [String] = []
 
     init(
         snapshots: [PiGatewayWire.Snapshot],
         streams: [AsyncThrowingStream<PiGatewayWire.Event, Error>],
-        models: [PiGatewayWire.Model] = []
+        models: [PiGatewayWire.Model] = [],
+        discovery: PiGatewayWire.Discovery = testDiscovery()
     ) {
         snapshotResults = snapshots.map(Result.success)
         self.streams = streams
         availableModelValues = models
+        discoveryValue = discovery
     }
 
     init(
         snapshotResults: [Result<PiGatewayWire.Snapshot, Error>],
         streams: [AsyncThrowingStream<PiGatewayWire.Event, Error>],
-        models: [PiGatewayWire.Model] = []
+        models: [PiGatewayWire.Model] = [],
+        discovery: PiGatewayWire.Discovery = testDiscovery()
     ) {
         self.snapshotResults = snapshotResults
         self.streams = streams
         availableModelValues = models
+        discoveryValue = discovery
     }
 
     var stateCallCount: Int { lock.withLock { stateCalls } }
@@ -910,7 +1110,7 @@ private final class PiServiceSpy: PiServiceProtocol, @unchecked Sendable {
 
     func cancelAllRequests() async { lock.withLock { cancellations += 1 } }
 
-    func discover() async throws -> PiGatewayWire.Discovery { testDiscovery() }
+    func discover() async throws -> PiGatewayWire.Discovery { discoveryValue }
     func listModels() async throws -> [PiGatewayWire.Model] { lock.withLock { availableModelValues } }
 
     func snapshot(sessionID _: String) async throws -> PiGatewayWire.Snapshot {
@@ -976,6 +1176,7 @@ private final class InMemoryPendingMutationStore: PiPendingMutationStoring, @unc
     private var uploads: [String: PiPendingAttachmentBatch] = [:]
 
     var attachmentUploads: [String: PiPendingAttachmentBatch] { lock.withLock { uploads } }
+    var mutations: [String: PiPendingMutationRecord] { lock.withLock { records } }
 
     func load() throws -> [String: PiPendingMutationRecord] { lock.withLock { records } }
     func save(_ records: [String: PiPendingMutationRecord]) throws { lock.withLock { self.records = records } }

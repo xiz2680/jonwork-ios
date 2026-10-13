@@ -39,6 +39,8 @@ The client must fail closed when a required capability is absent. It must never 
 
 Mutation requests use `Idempotency-Key` and revision fencing. Swift fixtures freeze discovery, snapshot, event, receipt, and error payloads. Deletion uses `DELETE /v1/sessions/{sessionId}` with `{ "clientId": "…" }` and requires an applied receipt with `deleted: true`; search uses the versioned `query`, `state`, and `limit` parameters on the session list.
 
+Discovery is accepted only when API `1.0` falls inside the declared `minimumApiVersion`/`maximumApiVersion` contract and every required capability, including `sessionSearch` and `sessionDelete`, is true. Session lists require `total` and `authoritative: true`. Model attachment metadata is required; missing metadata never implies attachment support.
+
 ## Command Mapping
 
 | iOS action | Pi command |
@@ -81,6 +83,7 @@ Mutation requests use `Idempotency-Key` and revision fencing. Swift fixtures fre
 - Reconnect replaces state from an authoritative snapshot, then resumes after the snapshot event ID. An expired cursor triggers another authoritative replacement.
 - Duplicate events are reduced idempotently by stable message and tool-call identity whenever the gateway supplies one.
 - The client does not automatically resend a prompt after an ambiguous network failure.
+- A `202` response for `set_model` or `set_thinking_level` is admission only. The selector stays pending until the matching `operation.settled`; after successful settlement, a fresh authoritative snapshot must confirm the requested configuration.
 
 ## Security
 
@@ -94,12 +97,11 @@ Mutation requests use `Idempotency-Key` and revision fencing. Swift fixtures fre
 
 ## Known Contract Gaps
 
-- Session search and deletion require the gateway's advertised optional capabilities; older compatible gateways keep those controls unavailable.
 - Restoring and takeover-pending are client request phases, not durable gateway snapshot fields.
-- Attachment support is limited by the intersection of discovery flags, discovery media types/limits, and the selected model's `input` values.
+- Attachment support is limited by the intersection of required discovery metadata, discovery media types/limits, and the selected model's required `attachments` metadata and `input` values.
 
 These are release blockers, not client-side fallback opportunities.
 
 ## Compatibility
 
-Unsupported major versions fail closed with an update action. Optional capabilities are feature-gated; they do not silently degrade core session safety.
+Unsupported API compatibility ranges fail closed with an update action. Required capabilities do not silently degrade core session safety.

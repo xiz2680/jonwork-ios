@@ -112,7 +112,7 @@ protocol PiServiceProtocol: Sendable {
     func events(sessionID: String, clientID: String, afterEventID: String) -> AsyncThrowingStream<PiGatewayWire.Event, Error>
     func mutate(_ action: PiConversationAction, sessionID: String, clientID: String, context: PiMutationContext) async throws -> PiGatewayWire.MutationReceipt
     func mutationReceipt(sessionID: String, idempotencyKey: String, clientID: String) async throws -> PiGatewayWire.MutationReceiptLookup
-    func deleteSession(sessionID: String, clientID: String, context: PiMutationContext) async throws -> PiGatewayWire.MutationReceipt
+    func deleteSession(sessionID: String, clientID: String, context: PiMutationContext) async throws -> PiGatewayWire.DeleteMutationReceipt
     func uploadAttachment(
         data: Data,
         fileName: String,
@@ -137,7 +137,7 @@ extension PiServiceProtocol {
     }
     func mutate(_: PiConversationAction, sessionID _: String, clientID _: String, context _: PiMutationContext) async throws -> PiGatewayWire.MutationReceipt { throw PiServiceError.invalidResponse }
     func mutationReceipt(sessionID _: String, idempotencyKey _: String, clientID _: String) async throws -> PiGatewayWire.MutationReceiptLookup { throw PiServiceError.invalidResponse }
-    func deleteSession(sessionID _: String, clientID _: String, context _: PiMutationContext) async throws -> PiGatewayWire.MutationReceipt { throw PiServiceError.invalidResponse }
+    func deleteSession(sessionID _: String, clientID _: String, context _: PiMutationContext) async throws -> PiGatewayWire.DeleteMutationReceipt { throw PiServiceError.invalidResponse }
     func uploadAttachment(data _: Data, fileName _: String, mediaType _: String, repositoryID _: String, idempotencyKey _: String) async throws -> PiGatewayWire.Attachment { throw PiServiceError.invalidResponse }
 }
 
@@ -184,7 +184,8 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
 
     func listSessions(repositoryID: String?) async throws -> [PiGatewayWire.SessionSummary] {
         let query = repositoryID?.piNilIfEmpty.map { [URLQueryItem(name: "repositoryId", value: $0)] } ?? []
-        let response: ItemResponse<PiGatewayWire.SessionSummary> = try await get("v1/sessions", queryItems: query)
+        let response: PiGatewayWire.SessionList = try await get("v1/sessions", queryItems: query)
+        try response.validate()
         return response.items
     }
 
@@ -201,10 +202,11 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
         }
         if let state { queryItems.append(.init(name: "state", value: state.rawValue)) }
         queryItems.append(.init(name: "limit", value: String(limit)))
-        let response: ItemResponse<PiGatewayWire.SessionSummary> = try await get(
+        let response: PiGatewayWire.SessionList = try await get(
             "v1/sessions",
             queryItems: queryItems
         )
+        try response.validate()
         return response.items
     }
 
@@ -370,17 +372,14 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
         sessionID: String,
         clientID: String,
         context: PiMutationContext
-    ) async throws -> PiGatewayWire.MutationReceipt {
-        let receipt: PiGatewayWire.MutationReceipt = try await mutationRequest(
+    ) async throws -> PiGatewayWire.DeleteMutationReceipt {
+        let receipt: PiGatewayWire.DeleteMutationReceipt = try await mutationRequest(
             method: "DELETE",
             path: "v1/sessions/\(try Self.segment(sessionID))",
             context: context,
             body: JSONEncoder().encode(ClientRequest(clientId: clientID))
         )
-        guard receipt.sessionId == sessionID,
-              receipt.responseStatus == 200,
-              receipt.deleted == true
-        else { throw PiServiceError.invalidResponse }
+        try receipt.validate(sessionID: sessionID)
         return receipt
     }
 
@@ -820,7 +819,7 @@ final class PiRefreshingService: PiServiceProtocol, @unchecked Sendable {
         sessionID: String,
         clientID: String,
         context: PiMutationContext
-    ) async throws -> PiGatewayWire.MutationReceipt {
+    ) async throws -> PiGatewayWire.DeleteMutationReceipt {
         try await retryOnce {
             try await $0.deleteSession(sessionID: sessionID, clientID: clientID, context: context)
         }

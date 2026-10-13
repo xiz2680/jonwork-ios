@@ -123,6 +123,11 @@ final class PiSessionCoordinator {
     private var pendingMutations: [Conversation.ID: PiPendingMutationRecord] = [:]
     private var pendingAttachmentBatches: [Conversation.ID: PiPendingAttachmentBatch] = [:]
     private var lastMutationReceipts: [Conversation.ID: PiGatewayWire.MutationReceipt] = [:]
+    private struct OperationSettlement: Sendable {
+        let status: String
+        let failure: PiConversationFailure?
+    }
+    private var operationSettlements: [Conversation.ID: [String: OperationSettlement]] = [:]
     private var phases: [Conversation.ID: ConnectionPhase] = [:]
     private var services: [Conversation.ID: any PiServiceProtocol] = [:]
     private var eventTasks: [Conversation.ID: Task<Void, Never>] = [:]
@@ -222,6 +227,7 @@ final class PiSessionCoordinator {
         discoveries[conversationID] = nil
         availableModels[conversationID] = nil
         lastMutationReceipts[conversationID] = nil
+        operationSettlements[conversationID] = nil
         phases[conversationID] = nil
         clearProjection(conversationID)
         persistBindings()
@@ -264,6 +270,7 @@ final class PiSessionCoordinator {
         pendingMutations.removeAll()
         try? persistPendingMutations()
         lastMutationReceipts.removeAll()
+        operationSettlements.removeAll()
         phases.removeAll()
         services.removeAll()
         renderTasks.values.forEach { $0.cancel() }
@@ -381,14 +388,22 @@ final class PiSessionCoordinator {
                     render(conversationID)
 
                     streamStartedAt = .now
+                    let replayCursor = pendingConfigurationReceipt(for: conversationID)?.afterEventId
+                        ?? snapshot.lastEventId
                     for try await wireEvent in service.events(
                         sessionID: binding.sessionID,
                         clientID: clientID,
-                        afterEventID: snapshot.lastEventId
+                        afterEventID: replayCursor
                     ) {
                         try Task.checkCancellation()
                         guard isCurrent(conversationID, binding: binding, generation: generation) else { return }
                         guard var currentAdapter = adapters[conversationID] else { return }
+                        try recordSettlement(from: wireEvent, conversationID: conversationID)
+                        if let lastEventID = currentAdapter.lastEventID,
+                           try PiGatewayWire.EventID(wireEvent.id) <= lastEventID
+                        {
+                            continue
+                        }
                         let event = try currentAdapter.adapt(wireEvent)
                         var current = reducers[conversationID] ?? reducer
                         current.reduce(event)
@@ -551,16 +566,16 @@ final class PiSessionCoordinator {
                   $0.provider == selected.provider && $0.id == selected.id
               })
         else { return nil }
-        let sources = Set(discovery.capabilities.attachments.sources ?? [.photoLibrary, .camera, .filePicker])
+        let sources = Set(discovery.capabilities.attachments.sources)
         let gatewayMediaTypes = Set(
-            (discovery.capabilities.attachments.mediaTypes ?? discovery.limits.attachmentMediaTypes)
+            discovery.capabilities.attachments.mediaTypes
                 .map { $0.lowercased() }
         )
         let modelAttachment = model.attachments
         let modelAllowsImages = model.input.contains(.image)
-            && (modelAttachment?.supported ?? true)
-            && (modelAttachment?.kinds.contains(.image) ?? true)
-        let modelMediaTypes = Set(modelAttachment?.mediaTypes.map { $0.lowercased() } ?? Array(gatewayMediaTypes))
+            && modelAttachment.supported
+            && modelAttachment.kinds.contains(.image)
+        let modelMediaTypes = Set(modelAttachment.mediaTypes.map { $0.lowercased() })
         let allowsImages = discovery.capabilities.attachments.images && modelAllowsImages
         let allowsFiles = discovery.capabilities.attachments.files && model.input.contains(.file)
         return .init(
@@ -570,8 +585,8 @@ final class PiSessionCoordinator {
             allowsPhotoLibrary: allowsImages && sources.contains(.photoLibrary),
             allowsFilePicker: (allowsImages || allowsFiles) && sources.contains(.filePicker),
             mediaTypes: gatewayMediaTypes.intersection(modelMediaTypes),
-            maximumBytes: min(discovery.limits.attachmentMaxBytes, modelAttachment?.maxBytes ?? .max),
-            maximumCount: min(discovery.limits.attachmentsPerPrompt, modelAttachment?.maxCount ?? .max)
+            maximumBytes: min(discovery.limits.attachmentMaxBytes, modelAttachment.maxBytes),
+            maximumCount: min(discovery.limits.attachmentsPerPrompt, modelAttachment.maxCount)
         )
     }
 
@@ -769,9 +784,19 @@ final class PiSessionCoordinator {
               receipt.sessionId == pending.sessionID,
               (200 ..< 300).contains(receipt.responseStatus)
         else { throw PiServiceError.invalidResponse }
+        if pending.action.requiresSettledConfiguration {
+            guard receipt.responseStatus == 202, let operationID = receipt.operationId else {
+                throw PiServiceError.invalidResponse
+            }
+            try await waitForConfigurationSettlement(
+                operationID: operationID,
+                conversationID: conversationID
+            )
+        }
         let snapshot = try await service.snapshot(sessionID: pending.sessionID)
         guard snapshot.sessionId == pending.sessionID,
-              snapshot.revision >= receipt.revision
+              snapshot.revision >= receipt.revision,
+              pending.action.matchesAuthoritativeConfiguration(snapshot.configuration)
         else { throw PiServiceError.invalidResponse }
         guard let discovery = discoveries[conversationID] else {
             throw PiServiceError.capabilityUnavailable(["discovery"])
@@ -786,7 +811,79 @@ final class PiSessionCoordinator {
         reducers[conversationID] = reducer
         lastMutationReceipts[conversationID] = receipt
         try clearPendingMutation(conversationID)
+        if let operationID = receipt.operationId {
+            operationSettlements[conversationID]?[operationID] = nil
+        }
         render(conversationID)
+    }
+
+    private func pendingConfigurationReceipt(
+        for conversationID: Conversation.ID
+    ) -> PiGatewayWire.MutationReceipt? {
+        guard let pending = pendingMutations[conversationID],
+              pending.action.requiresSettledConfiguration
+        else { return nil }
+        return pending.receipt
+    }
+
+    private func waitForConfigurationSettlement(
+        operationID: String,
+        conversationID: Conversation.ID
+    ) async throws {
+        guard let timeout = discoveries[conversationID]?.limits.mutationTimeoutMs else {
+            throw PiCoordinatorError.notConnected
+        }
+        let deadline = ContinuousClock.now + .milliseconds(timeout)
+        while ContinuousClock.now < deadline {
+            try Task.checkCancellation()
+            if let settlement = operationSettlements[conversationID]?[operationID] {
+                guard settlement.status == "completed" else {
+                    if let failure = settlement.failure {
+                        throw PiServiceError.gateway(code: failure.code, retryable: failure.retryable)
+                    }
+                    throw PiServiceError.gateway(code: "operation_\(settlement.status)", retryable: false)
+                }
+                return
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        throw PiServiceError.timedOut
+    }
+
+    private func recordSettlement(
+        from event: PiGatewayWire.Event,
+        conversationID: Conversation.ID
+    ) throws {
+        guard event.type == "operation.settled" else { return }
+        let data = event.data
+        guard Set(data.keys) == ["operationId", "status", "retryOfOperationId", "error"],
+              let operationID = data["operationId"]?.stringValue,
+              let status = data["status"]?.stringValue,
+              ["completed", "aborted", "failed"].contains(status),
+              data["retryOfOperationId"] == .null || data["retryOfOperationId"]?.stringValue != nil
+        else { throw PiAdapterError.invalidPayload("operation.settled") }
+        let failure: PiConversationFailure?
+        if status == "failed" {
+            guard let object = data["error"]?.objectValue,
+                  Set(object.keys) == ["code", "message", "retryable"],
+                  let code = object["code"]?.stringValue,
+                  let message = object["message"]?.stringValue,
+                  case let .bool(retryable) = object["retryable"]
+            else { throw PiAdapterError.invalidPayload("error") }
+            failure = .init(code: code, message: message, retryable: retryable)
+        } else {
+            guard data["error"] == .null else { throw PiAdapterError.invalidPayload("error") }
+            failure = nil
+        }
+        operationSettlements[conversationID, default: [:]][operationID] = .init(
+            status: status,
+            failure: failure
+        )
+        if operationSettlements[conversationID, default: [:]].count > 64,
+           let staleOperationID = operationSettlements[conversationID]?.keys.first(where: { $0 != operationID })
+        {
+            operationSettlements[conversationID]?[staleOperationID] = nil
+        }
     }
 
     private static func mutationDigest(
@@ -1216,6 +1313,28 @@ private extension PiPresentationMessage {
         var status = Message.ToolStatus(name: tool.name, state: state, message: tool.detail)
         if let existing { status.id = existing.id }
         return status
+    }
+}
+
+private extension PiConversationAction {
+    var requiresSettledConfiguration: Bool {
+        switch self {
+        case .setModel, .setThinkingLevel: true
+        default: false
+        }
+    }
+
+    func matchesAuthoritativeConfiguration(
+        _ configuration: PiGatewayWire.Snapshot.Configuration
+    ) -> Bool {
+        switch self {
+        case let .setModel(provider, modelID):
+            configuration.model?.provider == provider && configuration.model?.id == modelID
+        case let .setThinkingLevel(level):
+            configuration.thinkingLevel == level
+        default:
+            true
+        }
     }
 }
 

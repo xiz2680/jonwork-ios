@@ -20,6 +20,7 @@ struct PiGatewayV1Tests {
         let original = try #require(String(data: data, encoding: .utf8))
         let unsupported = original.replacingOccurrences(of: #""apiVersion":"1.0""#, with: #""apiVersion":"2.0""#)
         let missing = original.replacingOccurrences(of: #""replay":true"#, with: #""replay":false"#)
+        let missingSearch = original.replacingOccurrences(of: #""sessionSearch":true,"#, with: "")
         let insecureAuth = original.replacingOccurrences(
             of: "https://gateway.example.test/v1/auth/authorize",
             with: "http://gateway.example.test/v1/auth/authorize"
@@ -29,10 +30,62 @@ struct PiGatewayV1Tests {
         #expect(throws: PiServiceError.unsupportedGatewayVersion("2.0")) { try unsupportedDiscovery.validate() }
         let missingDiscovery = try JSONDecoder.piGateway.decode(PiGatewayWire.Discovery.self, from: Data(missing.utf8))
         #expect(throws: PiServiceError.capabilityUnavailable(["replay"])) { try missingDiscovery.validate() }
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder.piGateway.decode(PiGatewayWire.Discovery.self, from: Data(missingSearch.utf8))
+        }
         let insecureDiscovery = try JSONDecoder.piGateway.decode(PiGatewayWire.Discovery.self, from: Data(insecureAuth.utf8))
         #expect(throws: PiServiceError.unsupportedAuthentication) {
             try insecureDiscovery.validate(baseURL: URL(string: "https://gateway.example.test")!)
         }
+    }
+
+    @Test
+    func `discovery compatibility and model attachments fail closed`() throws {
+        let original = try #require(String(data: fixture("discovery.json"), encoding: .utf8))
+        let incompatible = original.replacingOccurrences(
+            of: #""maximumApiVersion":"1.0""#,
+            with: #""maximumApiVersion":"1.1""#
+        )
+        let discovery = try JSONDecoder.piGateway.decode(
+            PiGatewayWire.Discovery.self,
+            from: Data(incompatible.utf8)
+        )
+        #expect(throws: PiServiceError.unsupportedGatewayVersion("1.0")) {
+            try discovery.validate()
+        }
+
+        let modelWithoutAttachments = #"{"provider":"test","id":"text","name":"Text","reasoning":false,"input":["text"],"thinkingLevels":["off"]}"#
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder.piGateway.decode(
+                PiGatewayWire.Model.self,
+                from: Data(modelWithoutAttachments.utf8)
+            )
+        }
+    }
+
+    @Test
+    func `snapshot lifecycle distinguishes recoverable stopped released and failed`() throws {
+        let original = try #require(String(data: fixture("snapshot.json"), encoding: .utf8))
+        func state(lifecycle: String, runtime: String, runStatus: String) throws -> PiConversationState {
+            let json = original
+                .replacingOccurrences(of: #""lifecycle":"idle""#, with: #""lifecycle":"\#(lifecycle)""#)
+                .replacingOccurrences(of: #""runtime":"running""#, with: #""runtime":"\#(runtime)""#)
+                .replacingOccurrences(of: #""status":"idle""#, with: #""status":"\#(runStatus)""#)
+            let snapshot = try JSONDecoder.piGateway.decode(PiGatewayWire.Snapshot.self, from: Data(json.utf8))
+            var adapter = PiEventAdapter()
+            var reducer = PiSessionReducer()
+            reducer.reduce(try adapter.replace(with: snapshot, clientID: "ios-01"))
+            return reducer.state
+        }
+
+        let stopped = try state(lifecycle: "stopped", runtime: "stopped", runStatus: "idle")
+        #expect(!stopped.isReleased)
+        #expect(!stopped.isStreaming)
+        let released = try state(lifecycle: "released", runtime: "stopped", runStatus: "idle")
+        #expect(released.isReleased)
+        let failed = try state(lifecycle: "failed", runtime: "stopped", runStatus: "failed")
+        #expect(!failed.isReleased)
+        #expect(!failed.isStreaming)
     }
 
     @Test

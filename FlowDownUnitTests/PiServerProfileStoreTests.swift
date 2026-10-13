@@ -637,7 +637,7 @@ private final class CreationRecoveryService: PiServiceProtocol, @unchecked Senda
 private func recoverySnapshot(sessionID: String) -> PiGatewayWire.Snapshot {
     .init(
         contract: PiGatewayWire.contract, sessionId: sessionID, repositoryId: "/repo", revision: 1,
-        lastEventId: "0", runtime: .running, run: .init(status: .idle, operationId: nil),
+        lastEventId: "0", lifecycle: .idle, runtime: .running, run: .init(status: .idle, operationId: nil),
         controller: .init(clientId: nil, leaseExpiresAt: nil),
         configuration: .init(model: nil, thinkingLevel: .off), messages: [], attachments: []
     )
@@ -657,6 +657,7 @@ private func authRaceDiscovery() -> PiGatewayWire.Discovery {
     .init(
         contract: PiGatewayWire.contract,
         apiVersion: "1.0",
+        compatibility: .init(minimumApiVersion: "1.0", maximumApiVersion: "1.0"),
         authentication: .init(
             type: "oauth2_authorization_code", clientId: "pi-ios",
             authorizationEndpoint: URL(string: "https://pi.example.test/authorize")!,
@@ -666,10 +667,16 @@ private func authRaceDiscovery() -> PiGatewayWire.Discovery {
             refreshTokenRotation: "required"
         ),
         capabilities: .init(
-            repositories: true, models: true, thinking: true, sessions: true, commands: true,
+            repositories: true, models: true, thinking: true, sessions: true,
+            sessionSearch: true, sessionDelete: true, commands: true,
             sse: true, authoritativeSnapshot: true, eventIds: true, replay: true, idempotency: true,
             singleWriter: true, takeover: true, release: true, abort: true, retry: true,
-            attachments: .init(images: true, files: true)
+            attachments: .init(
+                images: true, files: false,
+                sources: [.photoLibrary, .camera, .filePicker],
+                mediaTypes: ["image/png"],
+                modelCompatibilityField: "attachments.supported"
+            )
         ),
         limits: .init(
             readTimeoutMs: 1_000, mutationTimeoutMs: 1_000, sseConnectTimeoutMs: 1_000,

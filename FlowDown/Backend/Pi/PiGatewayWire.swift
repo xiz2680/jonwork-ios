@@ -7,6 +7,7 @@ enum PiGatewayWire {
     struct Discovery: Decodable, Equatable, Sendable {
         let contract: String
         let apiVersion: String
+        let compatibility: Compatibility
         let authentication: Authentication
         let capabilities: Capabilities
         let limits: Limits
@@ -15,7 +16,9 @@ enum PiGatewayWire {
 
         func validate() throws {
             guard contract == PiGatewayWire.contract,
-                  majorVersion == PiGatewayWire.supportedMajorVersion
+                  apiVersion == "1.0",
+                  compatibility.minimumApiVersion == "1.0",
+                  compatibility.maximumApiVersion == "1.0"
             else { throw PiServiceError.unsupportedGatewayVersion(apiVersion) }
             guard authentication.type == "oauth2_authorization_code",
                   !authentication.clientId.isEmpty,
@@ -40,7 +43,13 @@ enum PiGatewayWire {
                   !limits.attachmentMediaTypes.isEmpty,
                   Set(limits.attachmentMediaTypes).count == limits.attachmentMediaTypes.count,
                   limits.attachmentMediaTypes.allSatisfy({ !$0.isEmpty }),
-                  limits.attachmentDigestAlgorithm == "sha-256"
+                  limits.attachmentDigestAlgorithm == "sha-256",
+                  !capabilities.attachments.sources.isEmpty,
+                  Set(capabilities.attachments.sources).count == capabilities.attachments.sources.count,
+                  !capabilities.attachments.mediaTypes.isEmpty,
+                  Set(capabilities.attachments.mediaTypes).count == capabilities.attachments.mediaTypes.count,
+                  Set(capabilities.attachments.mediaTypes).isSubset(of: Set(limits.attachmentMediaTypes)),
+                  capabilities.attachments.modelCompatibilityField == "attachments.supported"
             else { throw PiServiceError.invalidResponse }
         }
 
@@ -65,6 +74,11 @@ enum PiGatewayWire {
         }
     }
 
+    struct Compatibility: Decodable, Equatable, Sendable {
+        let minimumApiVersion: String
+        let maximumApiVersion: String
+    }
+
     struct Authentication: Decodable, Equatable, Sendable {
         let type: String
         let clientId: String
@@ -87,16 +101,16 @@ enum PiGatewayWire {
         struct Attachments: Decodable, Equatable, Sendable {
             let images: Bool
             let files: Bool
-            let sources: [AttachmentSource]?
-            let mediaTypes: [String]?
-            let modelCompatibilityField: String?
+            let sources: [AttachmentSource]
+            let mediaTypes: [String]
+            let modelCompatibilityField: String
 
             init(
                 images: Bool,
                 files: Bool,
-                sources: [AttachmentSource]? = nil,
-                mediaTypes: [String]? = nil,
-                modelCompatibilityField: String? = nil
+                sources: [AttachmentSource],
+                mediaTypes: [String],
+                modelCompatibilityField: String
             ) {
                 self.images = images
                 self.files = files
@@ -110,6 +124,8 @@ enum PiGatewayWire {
         let models: Bool
         let thinking: Bool
         let sessions: Bool
+        let sessionSearch: Bool
+        let sessionDelete: Bool
         let commands: Bool
         let sse: Bool
         let authoritativeSnapshot: Bool
@@ -126,7 +142,8 @@ enum PiGatewayWire {
         var missingRequired: [String] {
             [
                 (repositories, "repositories"), (models, "models"), (thinking, "thinking"),
-                (sessions, "sessions"), (commands, "commands"), (sse, "sse"),
+                (sessions, "sessions"), (sessionSearch, "sessionSearch"),
+                (sessionDelete, "sessionDelete"), (commands, "commands"), (sse, "sse"),
                 (authoritativeSnapshot, "authoritativeSnapshot"), (eventIds, "eventIds"),
                 (replay, "replay"), (idempotency, "idempotency"),
                 (singleWriter, "singleWriter"), (takeover, "takeover"),
@@ -180,7 +197,7 @@ enum PiGatewayWire {
         let thinkingLevels: [ThinkingLevel]
         let contextWindow: Int?
         let maxOutputTokens: Int?
-        let attachments: Attachments?
+        let attachments: Attachments
 
         init(
             provider: String,
@@ -191,7 +208,7 @@ enum PiGatewayWire {
             thinkingLevels: [ThinkingLevel],
             contextWindow: Int?,
             maxOutputTokens: Int?,
-            attachments: Attachments? = nil
+            attachments: Attachments
         ) {
             self.provider = provider
             self.id = id
@@ -206,20 +223,38 @@ enum PiGatewayWire {
     }
 
     enum Runtime: String, Decodable, Equatable, Sendable { case stopped, starting, running, stopping }
-    enum RunStatus: String, Decodable, Equatable, Sendable { case idle, queued, running, settling }
+    enum RunStatus: String, Decodable, Equatable, Sendable { case idle, running, failed }
     enum SessionLifecycle: String, Codable, Equatable, Sendable {
         case idle, running, restoring, released, failed, stopped
     }
 
     struct SessionSummary: Decodable, Equatable, Sendable, Identifiable {
+        struct Run: Decodable, Equatable, Sendable { let status: RunStatus }
         let sessionId: String
         let repositoryId: String
         let name: String?
+        let revision: Int
+        let lastEventId: String
         let createdAt: Date
         let modifiedAt: Date
         let messageCount: Int
+        let lifecycle: SessionLifecycle
         let runtime: Runtime
+        let run: Run
         var id: String { sessionId }
+        var isActive: Bool { lifecycle == .running || lifecycle == .restoring }
+    }
+
+    struct SessionList: Decodable, Equatable, Sendable {
+        let items: [SessionSummary]
+        let total: Int
+        let authoritative: Bool
+
+        func validate() throws {
+            guard authoritative, total >= 0, total >= items.count else {
+                throw PiServiceError.invalidResponse
+            }
+        }
     }
 
     struct Snapshot: Decodable, Equatable, Sendable {
@@ -236,6 +271,7 @@ enum PiGatewayWire {
         let repositoryId: String
         let revision: Int
         let lastEventId: String
+        let lifecycle: SessionLifecycle
         let runtime: Runtime
         let run: Run
         let controller: Controller
@@ -327,15 +363,13 @@ enum PiGatewayWire {
         let operationId: String?
         let afterEventId: String
         let responseStatus: Int
-        let deleted: Bool?
 
         init(
             sessionId: String,
             revision: Int,
             operationId: String?,
             afterEventId: String,
-            responseStatus: Int = 202,
-            deleted: Bool? = nil
+            responseStatus: Int = 202
         ) {
             status = .applied
             self.sessionId = sessionId
@@ -343,7 +377,27 @@ enum PiGatewayWire {
             self.operationId = operationId
             self.afterEventId = afterEventId
             self.responseStatus = responseStatus
-            self.deleted = deleted
+        }
+    }
+
+    struct DeleteMutationReceipt: Decodable, Equatable, Sendable {
+        let status: MutationReceipt.Status
+        let sessionId: String
+        let revision: Int
+        let operationId: String?
+        let afterEventId: String
+        let responseStatus: Int
+        let deleted: Bool
+
+        func validate(sessionID: String) throws {
+            guard status == .applied,
+                  sessionId == sessionID,
+                  revision >= 0,
+                  operationId == nil,
+                  responseStatus == 200,
+                  deleted,
+                  (try? EventID(afterEventId)) != nil
+            else { throw PiServiceError.invalidResponse }
         }
     }
 

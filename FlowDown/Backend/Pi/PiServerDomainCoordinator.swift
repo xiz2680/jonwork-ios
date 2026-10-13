@@ -264,7 +264,7 @@ final class PiServerDomainCoordinator {
             let sessions = try await service.listSessions(repositoryID: repositoryID)
             if let authenticationGeneration { try validateAuthentication(authenticationGeneration) }
             presentation.sessions = sessions.map {
-                .init(id: $0.sessionId, name: $0.name, messageCount: $0.messageCount, isRunning: $0.runtime == .running)
+                .init(id: $0.sessionId, name: $0.name, messageCount: $0.messageCount, isRunning: $0.isActive)
             }
         }
         return presentation
@@ -284,7 +284,7 @@ final class PiServerDomainCoordinator {
                 id: $0.sessionId,
                 name: $0.name,
                 messageCount: $0.messageCount,
-                isRunning: $0.runtime == .running
+                isRunning: $0.isActive
             )
         }
         return presentation
@@ -301,7 +301,7 @@ final class PiServerDomainCoordinator {
         )
         try validateAuthentication(generation)
         return sessions.map {
-            .init(id: $0.sessionId, name: $0.name, messageCount: $0.messageCount, isRunning: $0.runtime == .running)
+            .init(id: $0.sessionId, name: $0.name, messageCount: $0.messageCount, isRunning: $0.isActive)
         }
     }
 
@@ -442,7 +442,7 @@ final class PiServerDomainCoordinator {
             context: .init(idempotencyKey: UUID().uuidString, revision: snapshot.revision)
         )
         try validateAuthentication(generation)
-        guard receipt.deleted == true else { throw PiServiceError.invalidResponse }
+        guard receipt.deleted else { throw PiServiceError.invalidResponse }
         presentation.sessions.removeAll { $0.id == sessionID }
         return presentation
     }

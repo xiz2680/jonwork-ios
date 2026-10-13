@@ -374,6 +374,7 @@ private func makeSnapshot(text: String, sessionID: String = "session") -> PiGate
         repositoryId: "/repo",
         revision: 1,
         lastEventId: "0",
+        lifecycle: .idle,
         runtime: .running,
         run: .init(status: .idle, operationId: nil),
         controller: .init(clientId: nil, leaseExpiresAt: nil),
@@ -414,6 +415,7 @@ private func productionDiscovery() -> PiGatewayWire.Discovery {
     .init(
         contract: PiGatewayWire.contract,
         apiVersion: "1.0",
+        compatibility: .init(minimumApiVersion: "1.0", maximumApiVersion: "1.0"),
         authentication: .init(
             type: "oauth2_authorization_code",
             clientId: "pi-ios",
@@ -426,17 +428,23 @@ private func productionDiscovery() -> PiGatewayWire.Discovery {
             refreshTokenRotation: "required"
         ),
         capabilities: .init(
-            repositories: true, models: true, thinking: true, sessions: true, commands: true,
+            repositories: true, models: true, thinking: true, sessions: true,
+            sessionSearch: true, sessionDelete: true, commands: true,
             sse: true, authoritativeSnapshot: true, eventIds: true, replay: true, idempotency: true,
             singleWriter: true, takeover: true, release: true, abort: true, retry: true,
-            attachments: .init(images: true, files: true)
+            attachments: .init(
+                images: true, files: false,
+                sources: [.photoLibrary, .camera, .filePicker],
+                mediaTypes: ["image/png"],
+                modelCompatibilityField: "attachments.supported"
+            )
         ),
         limits: .init(
             readTimeoutMs: 1_000, mutationTimeoutMs: 1_000, sseConnectTimeoutMs: 1_000,
             replayRetentionEvents: 100, replayRetentionSeconds: 100,
             idempotencyRetentionSeconds: 86_400, attachmentMaxBytes: 1_000_000,
             attachmentTotalBytes: 2_000_000, attachmentsPerPrompt: 4, attachmentUploadTimeoutMs: 1_000,
-            attachmentDownloadTimeoutMs: 1_000, attachmentMediaTypes: ["image/png", "application/octet-stream"],
+            attachmentDownloadTimeoutMs: 1_000, attachmentMediaTypes: ["image/png"],
             attachmentDigestAlgorithm: "sha-256"
         )
     )

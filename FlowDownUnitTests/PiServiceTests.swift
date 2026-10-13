@@ -84,6 +84,37 @@ struct PiServiceTests {
     }
 
     @Test
+    func `delete session fails closed when the dedicated receipt is incomplete`() async throws {
+        let service = try makeService { _ in
+            (200, #"{"status":"applied","sessionId":"session-01","revision":8,"operationId":null,"afterEventId":"11","responseStatus":200}"#)
+        }
+
+        await #expect(throws: PiServiceError.invalidResponse) {
+            try await service.deleteSession(
+                sessionID: "session-01",
+                clientID: "ios-01",
+                context: .init(idempotencyKey: "delete-key-01", revision: 7)
+            )
+        }
+    }
+
+    @Test(arguments: [
+        #"{"items":[],"total":0,"authoritative":false}"#,
+        #"{"items":[],"total":-1,"authoritative":true}"#,
+        #"{"items":[]}"#,
+    ])
+    func `session list rejects non-authoritative or malformed envelopes`(_ response: String) async throws {
+        let service = try makeService { request in
+            #expect(request.url?.path == "/v1/sessions")
+            return (200, response)
+        }
+
+        await #expect(throws: Error.self) {
+            try await service.listSessions(repositoryID: nil)
+        }
+    }
+
+    @Test
     func `authentication response maps to actionable typed error`() async throws {
         let service = try makeService { _ in
             (401, #"{"error":"invalid token"}"#)
