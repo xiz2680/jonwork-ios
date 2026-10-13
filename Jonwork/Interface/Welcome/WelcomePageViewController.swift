@@ -1,292 +1,334 @@
-//
-//  WelcomePageViewController.swift
-//  Extracted reusable welcome screen
-//
-//  Created by ChatGPT on 2025/12/07.
-//
-
 import AlertController
-import ColorfulX
 import SnapKit
-import SwifterSwift
 import UIKit
 
-/// A self-contained welcome screen that does not depend on the original app infrastructure.
-/// - Shows an optional app icon, two-line title, feature list, and a primary action button.
-/// - Uses only UIKit + SnapKit + SwifterSwift so it can be dropped into another project.
-class WelcomePageViewController: UIViewController {
+final class WelcomePageViewController: UIViewController, UIScrollViewDelegate {
     var onComplete: (() -> Void)?
+    var dismissesOnCompletion = true
 
     let config: Configuration
-    let scrollView = UIScrollView()
-    let contentView = UIView()
-    let stackView: UIStackView = {
-        let stack = UIStackView()
-        stack.axis = .vertical
-        stack.spacing = 18
-        stack.alignment = .fill
-        stack.distribution = .fillProportionally
-        return stack
-    }()
+    private let pagingScrollView = UIScrollView()
+    private let pageStack = UIStackView()
+    private let pageControl = UIPageControl()
+    private let actionContainer = UIView()
+    private let actionButton = UIButton(type: .system)
+    private var pageViews: [WelcomeHeroPageView] = []
+    private var currentPage = 0
 
-    let ourColorView = AnimatedMulticolorGradientView().with { view in
-        view.setColors([
-            .accent,
-            .accent,
-            .clear, .clear, .clear,
-            .clear, .clear, .clear,
-        ], animated: false)
-        view.renderScale = 0.1
-        view.noise = 0
-        view.speed /= 2
-        view.frameLimit = 30
-    }
-
-    let actionContainer = UIView()
-    let actionButton = UIButton(type: .system)
-    var featureViews: [FeatureRowView] = []
-
-    let contentInsets = UIEdgeInsets(top: 28, left: 24, bottom: 28, right: 24)
+    private let backgroundView = JonworkPastelBackgroundView()
 
     init(config: Configuration = .default, onComplete: (() -> Void)? = nil) {
         self.config = config
         self.onComplete = onComplete
         super.init(nibName: nil, bundle: nil)
-        modalPresentationStyle = .formSheet
-        modalTransitionStyle = .coverVertical
+        modalTransitionStyle = .crossDissolve
         isModalInPresentation = true
-        preferredContentSize = .init(width: 520, height: 620)
+        preferredContentSize = .init(width: 560, height: 720)
     }
 
     @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        nil
-    }
+    required init?(coder _: NSCoder) { nil }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
-        view.tintColor = config.accentColor
-        setupLayout()
-        applyConfiguration()
-
-        ourColorView.alpha = 0.1
-        view.addSubview(ourColorView)
-        view.sendSubviewToBack(ourColorView)
-        ourColorView.snp.makeConstraints { make in
-            make.edges.equalToSuperview()
-        }
+        view.backgroundColor = JonworkPastelBackgroundView.surface
+        configureHierarchy()
+        configurePages()
+        updatePage(animated: false)
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         navigationController?.setNavigationBarHidden(true, animated: false)
-        navigationController?.view.tintColor = config.accentColor
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        animateFeatures()
+        pageViews.first?.animateIn()
     }
 
-    private func setupLayout() {
-        scrollView.alwaysBounceVertical = true
-        view.addSubview(scrollView)
-        scrollView.addSubview(contentView)
-        contentView.addSubview(stackView)
+    private func configureHierarchy() {
+        view.addSubview(backgroundView)
+        backgroundView.snp.makeConstraints { $0.edges.equalToSuperview() }
 
         view.addSubview(actionContainer)
-        actionContainer.addSubview(actionButton)
-
-        scrollView.snp.makeConstraints { make in
-            #if targetEnvironment(macCatalyst)
-                make.edges.equalToSuperview()
-            #else
-                make.top.leading.trailing.equalTo(view.safeAreaLayoutGuide)
-                make.bottom.equalTo(actionContainer.snp.top)
-            #endif
-        }
-
-        contentView.snp.makeConstraints { make in
-            make.edges.equalToSuperview()
-            make.width.equalTo(scrollView.snp.width)
-        }
-
-        stackView.snp.makeConstraints { make in
-            make.edges.equalToSuperview().inset(contentInsets)
-        }
-
-        let effect = UIVisualEffectView(effect: UIBlurEffect(style: .regular))
-        actionContainer.addSubview(effect)
-        actionContainer.sendSubviewToBack(effect)
-        effect.snp.makeConstraints { make in
-            make.edges.equalToSuperview()
-        }
+        actionContainer.backgroundColor = JonworkPastelBackgroundView.surface.withAlphaComponent(0.96)
         actionContainer.snp.makeConstraints { make in
             make.leading.trailing.bottom.equalToSuperview()
         }
 
-        let separator = UIView()
-        separator.backgroundColor = .separator
-        actionContainer.addSubview(separator)
-        separator.snp.makeConstraints { make in
+        pagingScrollView.isPagingEnabled = true
+        pagingScrollView.showsHorizontalScrollIndicator = false
+        pagingScrollView.alwaysBounceHorizontal = true
+        pagingScrollView.delegate = self
+        pagingScrollView.accessibilityIdentifier = "JonworkOnboardingPages"
+        pagingScrollView.accessibilityLabel = String(localized: "Welcome to Jonwork")
+        view.addSubview(pagingScrollView)
+        pagingScrollView.snp.makeConstraints { make in
             make.top.leading.trailing.equalToSuperview()
-            make.height.equalTo(0.5)
+            make.bottom.equalTo(actionContainer.snp.top)
         }
 
+        pageStack.axis = .horizontal
+        pageStack.alignment = .fill
+        pageStack.distribution = .fillEqually
+        pagingScrollView.addSubview(pageStack)
+        pageStack.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+            make.height.equalTo(pagingScrollView.snp.height)
+        }
+
+        pageControl.numberOfPages = config.pages.count
+        pageControl.currentPage = 0
+        pageControl.currentPageIndicatorTintColor = JonworkPastelBackgroundView.accent
+        pageControl.pageIndicatorTintColor = UIColor.secondaryLabel.withAlphaComponent(0.18)
+        pageControl.allowsContinuousInteraction = true
+        pageControl.addTarget(self, action: #selector(pageControlChanged), for: .valueChanged)
+        actionContainer.addSubview(pageControl)
+        actionContainer.addSubview(actionButton)
+        pageControl.snp.makeConstraints { make in
+            make.leading.equalToSuperview().offset(18)
+            make.centerY.equalTo(actionButton)
+        }
         actionButton.snp.makeConstraints { make in
-            #if targetEnvironment(macCatalyst)
-                make.edges.equalToSuperview().inset(16)
-            #else
-                make.top.equalTo(separator.snp.bottom).offset(12)
-                make.leading.trailing.equalToSuperview().inset(contentInsets.left)
-                make.bottom.equalTo(view.safeAreaLayoutGuide).inset(contentInsets.bottom)
-            #endif
-            make.height.equalTo(48)
+            make.top.equalToSuperview().offset(14)
+            make.leading.greaterThanOrEqualTo(pageControl.snp.trailing).offset(16)
+            make.trailing.equalToSuperview().inset(24)
+            make.bottom.equalTo(view.safeAreaLayoutGuide).inset(16)
+            make.width.greaterThanOrEqualTo(158)
+            make.width.lessThanOrEqualTo(236)
+            make.height.equalTo(56)
         }
-
-        actionButton.layer.cornerRadius = 12
-        actionButton.clipsToBounds = true
+        var buttonConfiguration = UIButton.Configuration.filled()
+        buttonConfiguration.cornerStyle = .large
+        buttonConfiguration.contentInsets = .init(top: 14, leading: 22, bottom: 14, trailing: 22)
+        actionButton.accessibilityIdentifier = "JonworkOnboardingContinue"
+        actionButton.configuration = buttonConfiguration
         actionButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
-        actionButton.addTarget(self, action: #selector(handleComplete), for: .touchUpInside)
+        actionButton.titleLabel?.adjustsFontForContentSizeCategory = true
+        actionButton.addTarget(self, action: #selector(handlePrimaryAction), for: .touchUpInside)
     }
 
-    private func applyConfiguration() {
-        for view in stackView.arrangedSubviews {
-            stackView.removeArrangedSubview(view)
-            view.removeFromSuperview()
+    private func configurePages() {
+        for page in config.pages {
+            let pageView = WelcomeHeroPageView(page: page)
+            pageViews.append(pageView)
+            pageStack.addArrangedSubview(pageView)
+            pageView.snp.makeConstraints { $0.width.equalTo(view.snp.width) }
         }
-        featureViews.removeAll()
-
-        let iconContainer = UIView()
-        let iconView = UIImageView(image: config.icon)
-        iconContainer.addSubview(iconView)
-        iconView.contentMode = .scaleAspectFill
-        iconView.layer.cornerRadius = 14
-        iconView.layer.cornerCurve = .continuous
-        iconView.addShadow(ofColor: .black, radius: 4, offset: CGSize(width: 0, height: 0), opacity: 0.1)
-        iconView.clipsToBounds = true
-        iconView.snp.makeConstraints { make in
-            make.width.height.equalTo(64)
-            make.center.equalToSuperview()
-            make.height.equalToSuperview()
-        }
-        stackView.addArrangedSubview(iconContainer)
-        stackView.setCustomSpacing(12, after: iconView)
-
-        let titleLabel = UILabel()
-        titleLabel.numberOfLines = 0
-        titleLabel.textAlignment = .left
-        let titleText = NSMutableAttributedString(
-            string: String(localized: config.title),
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 32, weight: .bold),
-                .foregroundColor: UIColor.label,
-            ],
-        )
-        titleText.append(NSAttributedString(
-            string: "\n" + String(localized: config.highlightedTitle),
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 32, weight: .bold),
-                .foregroundColor: config.accentColor,
-            ],
-        ))
-        titleLabel.attributedText = titleText
-        stackView.addArrangedSubview(titleLabel)
-
-        let subtitleLabel = UILabel()
-        subtitleLabel.text = String(localized: config.subtitle)
-        subtitleLabel.font = .preferredFont(forTextStyle: .body)
-        subtitleLabel.textColor = .secondaryLabel
-        subtitleLabel.numberOfLines = 0
-        stackView.addArrangedSubview(subtitleLabel)
-
-        let separator = UIView()
-        separator.backgroundColor = .separator
-        separator.snp.makeConstraints { make in
-            make.height.equalTo(0.75)
-        }
-        stackView.addArrangedSubview(separator)
-
-        for (index, feature) in config.features.enumerated() {
-            let row = FeatureRowView()
-            row.configure(feature: feature, accentColor: config.accentColor)
-            row.alpha = 0
-            featureViews.append(row)
-            stackView.addArrangedSubview(row)
-            if index != config.features.indices.last {
-                stackView.setCustomSpacing(10, after: row)
-            }
-        }
-
-        let spacer = UIView()
-        spacer.snp.makeConstraints { make in
-            make.height.greaterThanOrEqualTo(12)
-        }
-        stackView.addArrangedSubview(spacer)
-
-        var buttonConfig = UIButton.Configuration.filled()
-        buttonConfig.cornerStyle = .large
-        buttonConfig.baseBackgroundColor = config.accentColor
-        buttonConfig.baseForegroundColor = .white
-        buttonConfig.title = String(localized: config.buttonTitle)
-        actionButton.configuration = buttonConfig
     }
 
-    @objc
-    private func handleComplete() {
-        onComplete?()
+    @objc private func handlePrimaryAction() {
+        if currentPage < config.pages.count - 1 {
+            setPage(currentPage + 1, animated: true)
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            return
+        }
+        let completion = onComplete
         onComplete = nil
-        dismiss(animated: true)
+        if dismissesOnCompletion {
+            dismiss(animated: true) { completion?() }
+        } else {
+            completion?()
+        }
     }
 
-    private func animateFeatures() {
-        for (idx, view) in featureViews.enumerated() {
-            let delay = 0.1 * Double(idx)
-            UIView.animate(
-                withDuration: 0.5,
-                delay: delay,
-                usingSpringWithDamping: 0.9,
-                initialSpringVelocity: 0.4,
-                options: [.curveEaseInOut],
-            ) {
-                view.alpha = 1
+    @objc private func pageControlChanged() {
+        setPage(pageControl.currentPage, animated: true)
+    }
+
+    private func setPage(_ page: Int, animated: Bool) {
+        guard config.pages.indices.contains(page) else { return }
+        pagingScrollView.setContentOffset(
+            CGPoint(x: CGFloat(page) * pagingScrollView.bounds.width, y: 0),
+            animated: animated && !UIAccessibility.isReduceMotionEnabled
+        )
+        currentPage = page
+        updatePage(animated: animated)
+    }
+
+    private func updatePage(animated: Bool) {
+        guard config.pages.indices.contains(currentPage) else { return }
+        pageControl.currentPage = currentPage
+        let isLast = currentPage == config.pages.count - 1
+        var buttonConfiguration = actionButton.configuration ?? .filled()
+        buttonConfiguration.title = String(localized: isLast ? config.finalButtonTitle : config.nextButtonTitle)
+        buttonConfiguration.image = UIImage(systemName: isLast ? "arrow.right.circle.fill" : "arrow.right")
+        buttonConfiguration.imagePlacement = .trailing
+        buttonConfiguration.imagePadding = 8
+        buttonConfiguration.baseBackgroundColor = JonworkPastelBackgroundView.accent
+        buttonConfiguration.baseForegroundColor = .white
+        actionButton.accessibilityIdentifier = "JonworkOnboardingContinue"
+        actionButton.configuration = buttonConfiguration
+        pageViews[currentPage].animateIn()
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        guard scrollView === pagingScrollView, scrollView.bounds.width > 0 else { return }
+        currentPage = min(
+            max(Int(round(scrollView.contentOffset.x / scrollView.bounds.width)), 0),
+            config.pages.count - 1
+        )
+        updatePage(animated: true)
+    }
+}
+
+private final class WelcomeHeroPageView: UIView {
+    private let page: WelcomePageViewController.Page
+    private let hero = UIView()
+    private let copyStack = UIStackView()
+    private var hasAnimated = false
+
+    init(page: WelcomePageViewController.Page) {
+        self.page = page
+        super.init(frame: .zero)
+        configure()
+        registerForTraitChanges([
+            UITraitUserInterfaceStyle.self,
+            UITraitAccessibilityContrast.self,
+        ]) { (view: WelcomeHeroPageView, _) in
+            view.refreshLayerColors()
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { nil }
+
+    func animateIn() {
+        guard !hasAnimated else { return }
+        hasAnimated = true
+        guard !UIAccessibility.isReduceMotionEnabled else {
+            hero.alpha = 1
+            copyStack.alpha = 1
+            return
+        }
+        hero.alpha = 0
+        hero.transform = CGAffineTransform(scaleX: 0.82, y: 0.82).translatedBy(x: 0, y: 18)
+        copyStack.alpha = 0
+        copyStack.transform = CGAffineTransform(translationX: 0, y: 22)
+        UIView.animate(
+            withDuration: 0.72,
+            delay: 0.05,
+            usingSpringWithDamping: 0.78,
+            initialSpringVelocity: 0.25,
+            options: [.curveEaseOut]
+        ) {
+            self.hero.alpha = 1
+            self.hero.transform = .identity
+        }
+        UIView.animate(withDuration: 0.55, delay: 0.18, options: [.curveEaseOut]) {
+            self.copyStack.alpha = 1
+            self.copyStack.transform = .identity
+        }
+    }
+
+    private func configure() {
+        let scroll = UIScrollView()
+        scroll.alwaysBounceVertical = true
+        addSubview(scroll)
+        scroll.snp.makeConstraints { $0.edges.equalTo(safeAreaLayoutGuide) }
+        let content = UIView()
+        scroll.addSubview(content)
+        content.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+            make.width.equalTo(scroll.snp.width)
+            make.height.greaterThanOrEqualTo(scroll.snp.height)
+        }
+
+        let isBrandHero = page.symbol == "JonworkHeroJ"
+        hero.backgroundColor = isBrandHero ? .clear : UIColor.systemBackground.withAlphaComponent(0.88)
+        hero.layer.cornerRadius = isBrandHero ? 0 : 42
+        hero.layer.cornerCurve = .continuous
+        hero.layer.shadowColor = page.accentColor.cgColor
+        hero.layer.shadowOpacity = isBrandHero ? 0 : 0.08
+        hero.layer.shadowRadius = 28
+        hero.layer.shadowOffset = CGSize(width: 0, height: 14)
+        let symbolImage = isBrandHero ? UIImage(named: page.symbol) : UIImage(systemName: page.symbol)
+        let symbol = UIImageView(image: symbolImage)
+        symbol.tintColor = isBrandHero ? nil : page.accentColor
+        symbol.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 62, weight: .medium)
+        symbol.contentMode = .scaleAspectFit
+        hero.addSubview(symbol)
+        symbol.snp.makeConstraints { make in
+            make.center.equalToSuperview()
+            if isBrandHero {
+                make.edges.equalToSuperview()
+            } else {
+                make.width.height.lessThanOrEqualTo(80)
             }
         }
+        hero.snp.makeConstraints { make in
+            make.width.height.equalTo(isBrandHero ? 248 : 152)
+        }
+
+        let title = UILabel()
+        title.numberOfLines = 0
+        title.textAlignment = .center
+        title.adjustsFontForContentSizeCategory = true
+        title.text = String(localized: page.title)
+        title.textColor = .label
+        title.font = UIFontMetrics(forTextStyle: .largeTitle).scaledFont(
+            for: .systemFont(ofSize: 40, weight: .bold)
+        )
+
+        let subtitle = UILabel()
+        subtitle.text = String(localized: page.subtitle)
+        subtitle.font = UIFontMetrics(forTextStyle: .body).scaledFont(
+            for: .systemFont(ofSize: 18, weight: .regular)
+        )
+        subtitle.adjustsFontForContentSizeCategory = true
+        subtitle.textColor = .secondaryLabel
+        subtitle.numberOfLines = 0
+        subtitle.textAlignment = .center
+
+        copyStack.axis = .vertical
+        copyStack.alignment = .fill
+        copyStack.spacing = 14
+        copyStack.addArrangedSubview(title)
+        copyStack.addArrangedSubview(subtitle)
+
+        let stack = UIStackView(arrangedSubviews: [hero, copyStack])
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 28
+        content.addSubview(stack)
+        stack.snp.makeConstraints { make in
+            make.centerY.equalToSuperview().offset(-4).priority(.high)
+            make.top.greaterThanOrEqualToSuperview().offset(24)
+            make.bottom.lessThanOrEqualToSuperview().offset(-24)
+            make.leading.trailing.equalToSuperview().inset(28)
+        }
+        copyStack.snp.makeConstraints {
+            $0.width.equalToSuperview().priority(.high)
+            $0.width.lessThanOrEqualTo(380)
+        }
+        refreshLayerColors()
+    }
+
+    private func refreshLayerColors() {
+        hero.layer.shadowColor = page.accentColor.cgColor
     }
 }
 
 extension WelcomePageViewController {
     static func makePresentedController(
         config: Configuration = .default,
-        onComplete: (() -> Void)? = nil,
+        onComplete: (() -> Void)? = nil
     ) -> UIViewController {
         let controller = WelcomePageViewController(config: config, onComplete: onComplete)
-        controller.navigationItem.largeTitleDisplayMode = .never
-
         let navigationController = UINavigationController(rootViewController: controller)
-        navigationController.navigationBar.prefersLargeTitles = false
-        navigationController.view.backgroundColor = .systemBackground
-        navigationController.view.tintColor = config.accentColor
-        navigationController.navigationBar.tintColor = config.accentColor
+        navigationController.setNavigationBarHidden(true, animated: false)
         navigationController.isModalInPresentation = true
-
-        let preferredWidth = controller.preferredContentSize.width
-        let preferredHeight = controller.preferredContentSize.height
-
+        navigationController.preferredContentSize = controller.preferredContentSize
         #if targetEnvironment(macCatalyst)
             return AlertBaseController(
                 rootViewController: navigationController,
-                preferredWidth: preferredWidth,
-                preferredHeight: preferredHeight,
+                preferredWidth: controller.preferredContentSize.width,
+                preferredHeight: controller.preferredContentSize.height
             )
         #else
-            navigationController.modalTransitionStyle = .coverVertical
-            navigationController.modalPresentationStyle = .formSheet
-            navigationController.preferredContentSize = .init(
-                width: preferredWidth,
-                height: preferredHeight,
-            )
+            navigationController.modalPresentationStyle = .fullScreen
+            navigationController.modalTransitionStyle = .crossDissolve
             return navigationController
         #endif
     }

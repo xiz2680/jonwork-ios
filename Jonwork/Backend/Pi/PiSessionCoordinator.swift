@@ -12,11 +12,7 @@ enum JonworkSurfacePolicy {
     static let productionAllowsLegacyProviderNetworking = false
 
     static var allowsLegacyConversations: Bool {
-        #if DEBUG
-            return true
-        #else
-            return productionAllowsLegacyConversations
-        #endif
+        productionAllowsLegacyConversations
     }
 
     static var allowsLegacyProviderNetworking: Bool {
@@ -48,8 +44,11 @@ enum JonworkSurfacePolicy {
         return allowsLegacyConversations && !hasJonworkBinding
     }
 
-    static func permitsLegacyProviderAccess(hasJonworkBinding: Bool) -> Bool {
-        return !hasJonworkBinding
+    static func permitsLegacyProviderAccess(
+        hasJonworkBinding: Bool,
+        allowsLegacyConversations: Bool = allowsLegacyConversations
+    ) -> Bool {
+        return allowsLegacyConversations && !hasJonworkBinding
     }
 }
 

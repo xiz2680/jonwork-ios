@@ -149,7 +149,11 @@ final class PiServerDomainCoordinator {
         defer {
             if authenticationGeneration == generation { authenticationTask = nil }
         }
-        return try await task.value
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func performAuthentication(
@@ -186,8 +190,9 @@ final class PiServerDomainCoordinator {
                 persistLegacyToken: false,
                 authenticationGeneration: generation
             )
-        } catch PiServiceError.authenticationRequired {
+        } catch let error where PiAuthenticationRecoveryPolicy.requiresFreshSignIn(after: error) {
             try validateAuthentication(generation)
+            try profileStore.removeOAuthTokens(baseURL: baseURL)
             let replacement = try await authorizer.authorize(discovery: discovery, baseURL: baseURL)
             try validateAuthentication(generation)
             try profileStore.save(baseURL: baseURL, oauthTokens: replacement)
@@ -222,8 +227,9 @@ final class PiServerDomainCoordinator {
                 let refreshed = try await authorizer.refresh(stored, discovery: discovery)
                 try validateAuthentication(generation)
                 return refreshed
-            } catch {
+            } catch let error where PiAuthenticationRecoveryPolicy.requiresFreshSignIn(after: error) {
                 try validateAuthentication(generation)
+                try profileStore.removeOAuthTokens(baseURL: baseURL)
                 let replacement = try await authorizer.authorize(discovery: discovery, baseURL: baseURL)
                 try validateAuthentication(generation)
                 return replacement
@@ -655,5 +661,14 @@ final class PiServerDomainCoordinator {
         default:
             return false
         }
+    }
+
+}
+
+enum PiAuthenticationRecoveryPolicy {
+    static func requiresFreshSignIn(after error: Error) -> Bool {
+        if error as? PiOAuthError == .refreshUnavailable { return true }
+        if error as? PiServiceError == .authenticationRequired { return true }
+        return false
     }
 }

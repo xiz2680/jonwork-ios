@@ -99,6 +99,30 @@ import UIKit
 #endif
 
 extension SettingController {
+    static func makeJonworkWorkspaceController() -> UIViewController {
+        let navigationController = UINavigationController()
+        configureJonworkWorkspace(in: navigationController)
+        return navigationController
+    }
+
+    static func configureJonworkWorkspace(
+        in navigationController: UINavigationController,
+        workspace: SettingContent.PiServerController = SettingContent.PiServerController()
+    ) {
+        navigationController.setViewControllers([workspace], animated: false)
+        navigationController.setNavigationBarHidden(false, animated: false)
+        navigationController.isModalInPresentation = false
+        navigationController.navigationBar.prefersLargeTitles = false
+        navigationController.modalPresentationStyle = .fullScreen
+        workspace.navigationItem.leftBarButtonItem = UIBarButtonItem(
+            systemItem: .close,
+            primaryAction: UIAction { [weak navigationController] _ in
+                navigationController?.dismiss(animated: true)
+            }
+        )
+        workspace.prepareForEntry()
+    }
+
     enum EntryPage {
         case piServer
         case general

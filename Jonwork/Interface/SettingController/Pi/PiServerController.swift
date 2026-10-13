@@ -14,7 +14,7 @@ extension SettingController.SettingContent {
         private let domainCoordinator: PiServerDomainCoordinator
         private let gatewayConfiguration: PiGatewayDeploymentConfiguration
         private let autoConnect: Bool
-        private let clientID = UUID().uuidString
+        private let clientID = PiInstallationIdentity.current()
         private var repositories: [PiRepositoryPresentation] = []
         private var sessions: [PiSessionPresentation] = []
         private var allSessions: [PiSessionPresentation] = []
@@ -27,9 +27,6 @@ extension SettingController.SettingContent {
         private var connectTask: Task<Void, Never>?
         private var searchTask: Task<Void, Never>?
         private(set) var hasSavedToken = false
-        private lazy var oauthClient = PiOAuthClient { [weak self] in
-            self?.view.window ?? ASPresentationAnchor()
-        }
 
         init(
             profileStore: PiServerProfileStore = PiServerProfileStore(),
@@ -58,14 +55,26 @@ extension SettingController.SettingContent {
             searchController.searchBar.placeholder = String(localized: "Search Conversations")
             navigationItem.searchController = searchController
             navigationItem.hidesSearchBarWhenScrolling = false
+            let refreshControl = UIRefreshControl()
+            refreshControl.addAction(UIAction { [weak self] _ in
+                Task { @MainActor in await self?.refreshWorkspace() }
+            }, for: .valueChanged)
+            self.refreshControl = refreshControl
             do {
                 if gatewayConfiguration.accepts(try domainCoordinator.savedProfile()) {
                     hasSavedToken = try domainCoordinator.hasSavedCredentials()
-                    if autoConnect { startConnect() }
+                }
+                if autoConnect {
+                    DispatchQueue.main.async { [weak self] in self?.startConnect() }
                 }
             } catch {
                 presentError(error)
             }
+        }
+
+        func prepareForEntry() {
+            loadViewIfNeeded()
+            if !hasSavedToken { presentNativeSignIn(animated: false, allowsBackNavigation: false) }
         }
 
         override func numberOfSections(in _: UITableView) -> Int {
@@ -202,8 +211,7 @@ extension SettingController.SettingContent {
             case .connection where indexPath.row == 1 && hasSavedToken && !isSigningOut:
                 confirmRemoveSavedToken()
             case .repositories where !repositories.isEmpty && indexPath.row < repositories.count:
-                selectedRepository = repositories[indexPath.row].id
-                Task { await selectRepository(selectedRepository) }
+                Task { await selectRepository(repositories[indexPath.row].id) }
             case .repositories where selectedRepository != nil && indexPath.row == repositories.count:
                 Task { await openSession(resumeSessionID: nil) }
             case .sessions where !sessions.isEmpty:
@@ -266,6 +274,7 @@ extension SettingController.SettingContent {
                                baseURL: self.gatewayConfiguration.baseURL
                            )
                         {
+                            PiSessionCoordinator.shared.unbind(conversationID: localID)
                             ConversationManager.shared.deleteConversation(identifier: localID)
                         }
                         completion(true)
@@ -280,13 +289,21 @@ extension SettingController.SettingContent {
 
         private func connect() async {
             guard !isLoading, !isSigningOut else { return }
+            guard hasSavedToken else {
+                presentNativeSignIn()
+                return
+            }
             do {
                 let url = gatewayConfiguration.baseURL
                 setLoading(true)
                 defer { setLoading(false) }
-                let presentation = try await domainCoordinator.authenticate(baseURL: url, authorizer: oauthClient)
+                let presentation = try await domainCoordinator.authenticate(
+                    baseURL: url,
+                    authorizer: makeOAuthClient(anchorController: self)
+                )
                 apply(presentation)
                 hasSavedToken = try domainCoordinator.hasSavedCredentials()
+                await openDefaultSession()
             } catch is CancellationError {
                 return
             } catch {
@@ -295,9 +312,99 @@ extension SettingController.SettingContent {
                 sessions = []
                 allSessions = []
                 selectedRepository = nil
+                hasSavedToken = (try? domainCoordinator.hasSavedCredentials()) ?? false
                 tableView.reloadData()
-                presentError(error)
+                if !hasSavedToken, PiAuthenticationRecoveryPolicy.requiresFreshSignIn(after: error) {
+                    presentNativeSignIn(allowsBackNavigation: false)
+                } else {
+                    presentError(error)
+                }
             }
+        }
+
+        private func connect(
+            signInController: PiSignInViewController
+        ) async {
+            guard !isLoading, !isSigningOut else { return }
+            do {
+                let url = gatewayConfiguration.baseURL
+                setLoading(true)
+                signInController.setLoading(true)
+                defer {
+                    setLoading(false)
+                    signInController.setLoading(false)
+                }
+                let presentation = try await domainCoordinator.authenticate(
+                    baseURL: url,
+                    authorizer: makeOAuthClient(anchorController: signInController)
+                )
+                apply(presentation)
+                hasSavedToken = try domainCoordinator.hasSavedCredentials()
+                signInController.onCancelAuthentication = nil
+                let openDefaultSession: () -> Void = { [weak self] in
+                    _ = Task { @MainActor in await self?.openDefaultSession() }
+                }
+                if let navigationController,
+                   navigationController.viewControllers.contains(where: { $0 === signInController })
+                {
+                    navigationController.popViewController(animated: true)
+                    openDefaultSession()
+                } else {
+                    signInController.dismiss(animated: true, completion: openDefaultSession)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                isConnected = false
+                repositories = []
+                sessions = []
+                allSessions = []
+                selectedRepository = nil
+                hasSavedToken = (try? domainCoordinator.hasSavedCredentials()) ?? false
+                tableView.reloadData()
+                signInController.showError(error)
+            }
+        }
+
+        private func makeOAuthClient(anchorController: UIViewController) -> PiOAuthClient {
+            PiOAuthClient(anchor: { [weak anchorController] in
+                anchorController?.view.window ?? ASPresentationAnchor()
+            })
+        }
+
+        private func presentNativeSignIn(animated: Bool = true, allowsBackNavigation: Bool = true) {
+            let controller = PiSignInViewController()
+            controller.allowsBackNavigation = allowsBackNavigation
+            controller.onCancelAuthentication = { [weak self] in
+                self?.connectTask?.cancel()
+                self?.connectTask = nil
+            }
+            controller.onSubmit = { [weak self, weak controller] in
+                guard let self, let controller else { return }
+                self.connectTask?.cancel()
+                self.connectTask = Task { @MainActor in
+                    await self.connect(signInController: controller)
+                }
+            }
+            if let hostNavigationController = self.navigationController {
+                guard hostNavigationController.topViewController === self else { return }
+                hostNavigationController.pushViewController(controller, animated: animated)
+                return
+            }
+            guard presentedViewController == nil else { return }
+            let signInNavigationController = UINavigationController(rootViewController: controller)
+            signInNavigationController.modalPresentationStyle = .pageSheet
+            signInNavigationController.isModalInPresentation = false
+            if let sheet = signInNavigationController.sheetPresentationController {
+                sheet.detents = [.large()]
+                sheet.prefersGrabberVisible = true
+            }
+            present(signInNavigationController, animated: animated)
+        }
+
+        private func openDefaultSession() async {
+            guard isConnected, selectedRepository != nil else { return }
+            await openSession(resumeSessionID: PiDefaultSessionPolicy.sessionID(in: allSessions))
         }
 
         private func startConnect() {
@@ -340,6 +447,10 @@ extension SettingController.SettingContent {
             }
             do {
                 try await domainCoordinator.signOut()
+                hasSavedToken = (try? domainCoordinator.hasSavedCredentials()) ?? false
+                if !hasSavedToken {
+                    presentNativeSignIn(animated: false, allowsBackNavigation: false)
+                }
             } catch {
                 presentError(error)
             }
@@ -347,12 +458,29 @@ extension SettingController.SettingContent {
 
         private func selectRepository(_ repositoryID: String?) async {
             guard let repositoryID, !isSigningOut else { return }
+            let previousRepository = selectedRepository
+            selectedRepository = repositoryID
+            tableView.reloadSections(IndexSet(integer: Section.repositories.rawValue), with: .none)
             do {
                 apply(try await domainCoordinator.selectRepository(repositoryID))
             } catch is CancellationError {
+                selectedRepository = previousRepository
+                tableView.reloadSections(IndexSet(integer: Section.repositories.rawValue), with: .none)
                 return
             } catch {
+                selectedRepository = previousRepository
+                tableView.reloadSections(IndexSet(integer: Section.repositories.rawValue), with: .none)
                 presentError(error)
+            }
+        }
+
+        private func refreshWorkspace() async {
+            defer { refreshControl?.endRefreshing() }
+            guard !isLoading, !isSigningOut else { return }
+            if isConnected {
+                await reloadSessions()
+            } else {
+                await connect()
             }
         }
 
@@ -447,6 +575,13 @@ extension SettingController.SettingContent {
             }
             present(alert, animated: true)
         }
+
+    }
+}
+
+enum PiDefaultSessionPolicy {
+    static func sessionID(in sessions: [PiSessionPresentation]) -> String? {
+        sessions.first(where: \.isRunning)?.id ?? sessions.first?.id
     }
 }
 

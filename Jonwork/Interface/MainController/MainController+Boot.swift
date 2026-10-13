@@ -42,6 +42,11 @@ extension MainController {
     }
 
     func queueNewConversation(text: String, shouldSend: Bool = false) {
+        guard JonworkSurfacePolicy.allowsLegacyConversations else {
+            load(nil)
+            presentWorkspaceConnection()
+            return
+        }
         #if DEBUG
             Task { @MainActor in
                 let conversation = ConversationManager.shared.createNewConversation(autoSelect: true)
@@ -60,17 +65,28 @@ extension MainController {
     }
 
     func scheduleWelcomeIfNeeded() {
-        guard WelcomeExperience.shouldPresent else { return }
         guard !hasScheduledWelcome else { return }
+        guard presentedViewController == nil else { return }
         hasScheduledWelcome = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self else { return }
-            guard WelcomeExperience.shouldPresent else { return }
-            guard presentedViewController == nil else { return }
-            let controller = WelcomePageViewController.makePresentedController {
+        if WelcomeExperience.shouldPresent {
+            let welcome = WelcomePageViewController()
+            let navigation = UINavigationController(rootViewController: welcome)
+            navigation.modalPresentationStyle = .fullScreen
+            navigation.isModalInPresentation = true
+            welcome.dismissesOnCompletion = false
+            welcome.onComplete = { [weak navigation] in
                 WelcomeExperience.markPresented()
+                guard let navigation else { return }
+                SettingController.configureJonworkWorkspace(in: navigation)
             }
-            present(controller, animated: true)
+            present(navigation, animated: false)
+        } else {
+            presentWorkspaceConnection(animated: false)
         }
+    }
+
+    func presentWorkspaceConnection(animated: Bool = true) {
+        guard presentedViewController == nil else { return }
+        present(SettingController.makeJonworkWorkspaceController(), animated: animated)
     }
 }

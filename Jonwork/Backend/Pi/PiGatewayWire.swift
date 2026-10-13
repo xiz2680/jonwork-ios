@@ -59,9 +59,10 @@ enum PiGatewayWire {
             let baseIsLoopback = baseURL.host.map { loopbackHosts.contains($0.lowercased()) } == true
             for endpoint in [
                 authentication.authorizationEndpoint,
+                authentication.credentialEndpoint,
                 authentication.tokenEndpoint,
                 authentication.revocationEndpoint,
-            ] {
+            ].compactMap({ $0 }) {
                 let scheme = endpoint.scheme?.lowercased()
                 let endpointIsLoopback = endpoint.host.map { loopbackHosts.contains($0.lowercased()) } == true
                 guard scheme == "https" || (scheme == "http" && baseIsLoopback && endpointIsLoopback),
@@ -83,6 +84,7 @@ enum PiGatewayWire {
         let type: String
         let clientId: String
         let authorizationEndpoint: URL
+        var credentialEndpoint: URL? = nil
         let tokenEndpoint: URL
         let revocationEndpoint: URL
         let scopes: [String]

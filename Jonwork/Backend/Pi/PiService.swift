@@ -35,6 +35,7 @@ enum PiServiceError: Error, Equatable, LocalizedError {
     case timedOut
     case networkUnavailable
     case connectionLost
+    case gatewayUnavailable
     case invalidResponse
     case unsupportedGatewayVersion(String)
     case unsupportedAuthentication
@@ -61,6 +62,8 @@ enum PiServiceError: Error, Equatable, LocalizedError {
         case .timedOut: String(localized: "Jonwork took too long to respond. Check your connection and try again.")
         case .networkUnavailable: String(localized: "Jonwork is unreachable. Check your network and try again.")
         case .connectionLost: String(localized: "The Jonwork connection was interrupted. Reconnecting…")
+        case .gatewayUnavailable:
+            String(localized: "The Jonwork service for this build is unavailable. Please try again after the gateway is online.")
         case .invalidResponse: String(localized: "Jonwork returned an unexpected response.")
         case .unsupportedGatewayVersion: String(localized: "Jonwork needs an update before it can connect.")
         case .unsupportedAuthentication: String(localized: "This server does not support secure native sign-in.")
@@ -89,7 +92,7 @@ enum PiServiceError: Error, Equatable, LocalizedError {
 
     var isRecoverableTransportFailure: Bool {
         switch self {
-        case .timedOut, .networkUnavailable, .connectionLost, .transportFailure,
+        case .timedOut, .networkUnavailable, .connectionLost, .gatewayUnavailable, .transportFailure,
              .eventStreamEnded, .eventTooLarge, .eventBufferOverflow, .eventQueueOverflow,
              .replayCursorExpired, .conflict:
             return true
@@ -287,8 +290,9 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
                     guard let connectTimeoutMilliseconds else {
                         throw PiServiceError.capabilityUnavailable(["discovery"])
                     }
+                    let eventPath = "v1/sessions/\(try Self.segment(sessionID))/events"
                     var components = URLComponents(
-                        url: configuration.baseURL.appending(path: "v1/sessions/\(try Self.segment(sessionID))/events"),
+                        url: configuration.baseURL.appending(path: eventPath),
                         resolvingAgainstBaseURL: false
                     )
                     components?.queryItems = [.init(name: "clientId", value: clientID)]
@@ -302,7 +306,7 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
                         request: request,
                         timeoutMilliseconds: connectTimeoutMilliseconds
                     )
-                    try Self.validate(response: response, data: nil)
+                    try Self.validate(response: response, data: nil, path: eventPath)
                     guard response.mimeType == "text/event-stream" else { throw PiServiceError.invalidResponse }
 
                     var parser = PiSSERecordParser(
@@ -508,7 +512,7 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
                 for: request,
                 maximumBodyBytes: maximumBodyBytes
             )
-            try Self.validate(response: response, data: data)
+            try Self.validate(response: response, data: data, path: path)
             guard response.mimeType == "application/json" || response.mimeType?.hasSuffix("+json") == true else {
                 throw PiServiceError.invalidResponse
             }
@@ -604,7 +608,7 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     }
 
-    private static func validate(response: URLResponse, data: Data?) throws {
+    private static func validate(response: URLResponse, data: Data?, path: String) throws {
         guard let response = response as? HTTPURLResponse else { throw PiServiceError.invalidResponse }
         guard (200 ..< 300).contains(response.statusCode) else {
             if let data,
@@ -623,8 +627,13 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
             switch response.statusCode {
             case 401: throw PiServiceError.authenticationRequired
             case 403: throw PiServiceError.accessDenied
-            case 404: throw PiServiceError.sessionUnavailable
+            case 404:
+                if path.hasPrefix("v1/sessions/") { throw PiServiceError.sessionUnavailable }
+                throw PiServiceError.gatewayUnavailable
             case 409: throw PiServiceError.conflict
+            case 500 ... 599:
+                if path == ".well-known/pi-gateway" { throw PiServiceError.gatewayUnavailable }
+                throw PiServiceError.httpFailure(statusCode: response.statusCode)
             default: throw PiServiceError.httpFailure(statusCode: response.statusCode)
             }
         }
@@ -635,6 +644,10 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
         if let error = error as? PiAdapterError { return error }
         if error is DecodingError { return PiServiceError.invalidResponse }
         guard let error = error as? URLError else { return PiServiceError.invalidResponse }
+        return mapTransportError(error)
+    }
+
+    static func mapTransportError(_ error: URLError) -> Error {
         switch error.code {
         case .timedOut: return PiServiceError.timedOut
         case .notConnectedToInternet, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed:

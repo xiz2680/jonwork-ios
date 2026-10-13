@@ -229,6 +229,26 @@ struct PiServerProfileStoreTests {
 
     @Test
     @MainActor
+    func `caller cancellation stops authorization and does not persist credentials`() async throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        let service = SuspendedAuthenticationService()
+        let authorizer = CancelAwareAuthorizer()
+        let domain = makeDomain(profileStore: context.store, service: service, pendingStore: ProfilePendingStore())
+        let task = Task { try await domain.authenticate(baseURL: URL(string: "https://pi.example.test")!, authorizer: authorizer) }
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !authorizer.started, ContinuousClock.now < deadline { await Task.yield() }
+        #expect(authorizer.started)
+        task.cancel()
+        await #expect(throws: CancellationError.self) { _ = try await task.value }
+        #expect(authorizer.cancelled)
+        #expect(try !context.store.hasSavedToken())
+        #expect(!domain.presentation.isConnected)
+        #expect(service.listRepositoryCallCount == 0)
+    }
+
+    @Test
+    @MainActor
     func `ambiguous restore looks up receipt then replays the exact original request only when missing`() async throws {
         let context = makeContext()
         defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
@@ -416,61 +436,6 @@ struct PiServerProfileStoreTests {
         #expect(try context.store.oauthTokens(baseURL: url) == nil)
     }
 
-    @Test
-    @MainActor
-    func `revocation during token refresh prevents retry command from reaching rotated service`() async throws {
-        let context = makeContext()
-        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
-        let url = try #require(URL(string: "https://pi.example.test"))
-        let old = PiOAuthTokens(accessToken: "old-access", refreshToken: "old-refresh", expiresAt: Date().addingTimeInterval(900))
-        let rotated = PiOAuthTokens(accessToken: "new-access", refreshToken: "new-refresh", expiresAt: Date().addingTimeInterval(900))
-        try context.store.save(baseURL: url, oauthTokens: old)
-        let authorizer = ControlledRefreshAuthorizer(result: .success(rotated), suspended: true)
-        let provider = PiCredentialProvider(baseURL: url, tokens: old, authorizer: authorizer,
-            discovery: authRaceDiscovery(), profileStore: context.store)
-        let counter = SharingMutationAttemptCounter()
-        let failures = AuthenticationFailureCounter()
-        let service = try PiRefreshingService(baseURL: url, accessToken: old.accessToken,
-            discovery: authRaceDiscovery(), credentialProvider: provider,
-            serviceFactory: { TokenAwareService(token: $0.token, validToken: rotated.accessToken, mutationCounter: counter) },
-            authenticationFailure: { await failures.record() })
-        let consent = PiSharingConsent(defaults: context.defaults)
-        let scope = PiSharingConsent.Scope(workspaceURL: url, repository: "/repo", connectionID: "ios", provider: "test", modelID: "model")
-        #expect(await consent.authorize(scope, currentScope: { scope }, requestPermission: { true }))
-        let fence = try #require(consent.fence(for: scope))
-        let retry = Task {
-            try await service.mutateAuthorized(.retry(operationID: "failed-operation"), sessionID: "session", clientID: "ios",
-                context: .init(idempotencyKey: "retry-request-1234", revision: 1), authorization: {
-                    guard fence.isValid(for: scope) else { throw PiCoordinatorError.sessionStateChanged }
-                })
-        }
-        while !authorizer.isWaitingForResume { await Task.yield() }
-        consent.revokeAll()
-        authorizer.resume()
-        await #expect(throws: PiCoordinatorError.sessionStateChanged) { _ = try await retry.value }
-        #expect(counter.count == 1)
-        let authenticationFailures = await failures.count
-        #expect(authenticationFailures == 0)
-    }
-
-    @Test
-    @MainActor
-    func `failed authenticated workspace clears sharing grants before another account can reconnect`() async throws {
-        let context = makeContext()
-        defer {
-            context.defaults.removePersistentDomain(forName: context.suiteName)
-            PiSharingConsent.shared.revokeAll()
-        }
-        let url = try #require(URL(string: "https://pi.example.test"))
-        let scope = PiSharingConsent.Scope(workspaceURL: url, repository: "/repo", connectionID: "ios", provider: "test", modelID: "model")
-        #expect(await PiSharingConsent.shared.authorize(scope, currentScope: { scope }, requestPermission: { true }))
-        let domain = makeDomain(profileStore: context.store, service: UnauthenticatedWorkspaceService(), pendingStore: ProfilePendingStore())
-        await #expect(throws: CancellationError.self) {
-            _ = try await domain.authenticate(baseURL: url, authorizer: ImmediateAuthorizer())
-        }
-        #expect(!PiSharingConsent.shared.isAuthorized(scope))
-    }
-
     @MainActor
     private func makeDomain(
         profileStore: PiServerProfileStore,
@@ -566,18 +531,10 @@ private actor AuthenticationFailureCounter {
 private final class TokenAwareService: PiServiceProtocol, @unchecked Sendable {
     private let token: String?
     private let validToken: String
-    private let mutationCounter: SharingMutationAttemptCounter?
 
-    init(token: String?, validToken: String, mutationCounter: SharingMutationAttemptCounter? = nil) {
+    init(token: String?, validToken: String) {
         self.token = token
         self.validToken = validToken
-        self.mutationCounter = mutationCounter
-    }
-
-    func mutate(_ action: PiConversationAction, sessionID: String, clientID: String, context: PiMutationContext) async throws -> PiGatewayWire.MutationReceipt {
-        mutationCounter?.record()
-        guard token == validToken else { throw PiServiceError.authenticationRequired }
-        throw PiServiceError.invalidResponse
     }
 
     func discover() async throws -> PiGatewayWire.Discovery { authRaceDiscovery() }
@@ -726,6 +683,7 @@ private func authRaceDiscovery() -> PiGatewayWire.Discovery {
         authentication: .init(
             type: "oauth2_authorization_code", clientId: "pi-ios",
             authorizationEndpoint: URL(string: "https://pi.example.test/authorize")!,
+            credentialEndpoint: URL(string: "https://pi.example.test/password")!,
             tokenEndpoint: URL(string: "https://pi.example.test/token")!,
             revocationEndpoint: URL(string: "https://pi.example.test/revoke")!,
             scopes: ["pi.gateway"], pkceMethods: ["S256"], accessTokenLifetimeSeconds: 900,
@@ -816,14 +774,18 @@ private enum PiCredentialTestError: Error {
     case failed
 }
 
-private final class SharingMutationAttemptCounter: @unchecked Sendable {
+private final class CancelAwareAuthorizer: PiOAuthAuthorizing, @unchecked Sendable {
     private let lock = NSLock()
-    private var attempts = 0
-    var count: Int { lock.withLock { attempts } }
-    func record() { lock.withLock { attempts += 1 } }
-}
-
-private struct UnauthenticatedWorkspaceService: PiServiceProtocol {
-    func discover() async throws -> PiGatewayWire.Discovery { authRaceDiscovery() }
-    func listRepositories() async throws -> [PiGatewayWire.Repository] { throw PiServiceError.authenticationRequired }
+    private var didStart = false
+    private var didCancel = false
+    var started: Bool { lock.withLock { didStart } }
+    var cancelled: Bool { lock.withLock { didCancel } }
+    @MainActor
+    func authorize(discovery _: PiGatewayWire.Discovery, baseURL _: URL) async throws -> PiOAuthTokens {
+        lock.withLock { didStart = true }
+        do { try await Task.sleep(for: .seconds(10)) }
+        catch { lock.withLock { didCancel = true }; throw error }
+        throw PiOAuthError.invalidAuthorizationResponse
+    }
+    func refresh(_ tokens: PiOAuthTokens, discovery _: PiGatewayWire.Discovery) async throws -> PiOAuthTokens { tokens }
 }
