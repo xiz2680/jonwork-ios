@@ -10,6 +10,7 @@ extension MessageListView {
     enum Entry: Identifiable, Hashable {
         case userContent(Message.ID, MessageRepresentation)
         case userAttachment(Message.ID, Attachments)
+        case assistantImages(Message.ID, [URL])
         case reasoningContent(Message.ID, MessageRepresentation)
         case aiContent(Message.ID, MessageRepresentation)
         case hint(String, String)
@@ -23,6 +24,8 @@ extension MessageListView {
                 "UserContent.\(message.id)"
             case let .userAttachment(_, message):
                 "UserAttachment.\(message.id)"
+            case let .assistantImages(id, _):
+                "AssistantImages.\(id)"
             case let .reasoningContent(_, message):
                 "ReasoningContent.\(message.id)"
             case let .aiContent(_, message):
@@ -147,6 +150,10 @@ extension MessageListView {
                 if !messageContent.isEmpty {
                     checkAddDateHint(message.creation)
                     entries.append(.aiContent(message.objectId, .init(from: message)))
+                    let images = MarkdownOutputImages.urls(in: messageContent)
+                    if !images.isEmpty {
+                        entries.append(.assistantImages(message.objectId, images))
+                    }
                 }
 
             // MARK: - Web Search

@@ -11,14 +11,18 @@ enum WelcomeExperience {
     private static let seenVersionKey = "WelcomeExperience.lastSeenVersion"
 
     private static var currentVersion: String {
-        "0"
+        "jonwork-onboarding-1"
     }
 
     static var shouldPresent: Bool {
-        UserDefaults.standard.string(forKey: seenVersionKey) != currentVersion
+        shouldPresent(in: .standard)
     }
 
-    static func markPresented() {
-        UserDefaults.standard.set(currentVersion, forKey: seenVersionKey)
+    static func shouldPresent(in defaults: UserDefaults) -> Bool {
+        defaults.string(forKey: seenVersionKey) != currentVersion
+    }
+
+    static func markPresented(in defaults: UserDefaults = .standard) {
+        defaults.set(currentVersion, forKey: seenVersionKey)
     }
 }

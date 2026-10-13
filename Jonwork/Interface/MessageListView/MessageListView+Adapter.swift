@@ -32,7 +32,7 @@ extension MessageListView: ListViewAdapter {
 
         return switch entry {
         case .userContent: RowType.userContent
-        case .userAttachment: RowType.userAttachment
+        case .userAttachment, .assistantImages: RowType.userAttachment
         case .aiContent: RowType.aiContent
         case .webSearchContent: RowType.webSearch
         case .hint: RowType.hint
@@ -92,7 +92,7 @@ extension MessageListView: ListViewAdapter {
                 ])
                 let availableWidth = UserMessageView.availableTextWidth(for: containerWidth)
                 return boundingSize(with: availableWidth, for: attributedContent).height + UserMessageView.textPadding * 2
-            case .userAttachment:
+            case .userAttachment, .assistantImages:
                 return AttachmentsBar.itemHeight
             case let .reasoningContent(_, message):
                 let attributedContent = NSAttributedString(string: message.content, attributes: [
@@ -155,6 +155,8 @@ extension MessageListView: ListViewAdapter {
         } else if let attachmentView = rowView as? UserAttachmentView {
             if case let .userAttachment(_, attachments) = entry {
                 attachmentView.update(with: attachments)
+            } else if case let .assistantImages(_, urls) = entry {
+                attachmentView.update(outputImages: urls)
             } else { assertionFailure() }
         } else if let aiMessageView = rowView as? AiMessageView {
             if case let .aiContent(_, message) = entry {

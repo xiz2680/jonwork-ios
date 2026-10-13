@@ -7,6 +7,10 @@ import UIKit
 
 final class UserAttachmentView: MessageListRowView {
     private lazy var attachmentsBar: AttachmentsBar = .init()
+    private var imageTask: Task<Void, Never>?
+    private var imageGeneration = UUID()
+    private var imageURLs: [URL] = []
+    private var isOutput = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -25,6 +29,10 @@ final class UserAttachmentView: MessageListRowView {
     override func prepareForReuse() {
         super.prepareForReuse()
 
+        imageTask?.cancel()
+        imageTask = nil
+        imageGeneration = UUID()
+        imageURLs = []
         attachmentsBar.deleteAllItems()
     }
 
@@ -35,7 +43,7 @@ final class UserAttachmentView: MessageListRowView {
         let bounds = contentView.bounds
         let width = min(idealWidth, bounds.width)
         attachmentsBar.frame = .init(
-            x: bounds.width - width,
+            x: isOutput ? 0 : bounds.width - width,
             y: 0,
             width: width,
             height: bounds.height,
@@ -43,8 +51,45 @@ final class UserAttachmentView: MessageListRowView {
     }
 
     func update(with attachments: MessageListView.Attachments) {
+        isOutput = false
+        imageTask?.cancel()
+        imageGeneration = UUID()
+        imageURLs = []
+        attachmentsBar.deleteAllItems()
         for element in attachments.items {
             attachmentsBar.insert(item: element)
         }
     }
+
+    func update(outputImages urls: [URL]) {
+        isOutput = true
+        guard imageURLs != urls else { return }
+        imageTask?.cancel()
+        imageGeneration = UUID()
+        let generation = imageGeneration
+        imageURLs = urls
+        attachmentsBar.deleteAllItems()
+        imageTask = Task { [weak self] in
+            for url in urls {
+                guard !Task.isCancelled else { return }
+                guard let data = try? await MarkdownOutputImages.load(url),
+                      let thumbnail = MarkdownOutputImages.thumbnail(data),
+                      let filenameExtension = MarkdownOutputImages.filenameExtension(data) else { continue }
+                guard let self, !Task.isCancelled, imageGeneration == generation else { return }
+                attachmentsBar.insert(item: .init(
+                    type: .image,
+                    name: String(localized: "Image"),
+                    previewImage: thumbnail,
+                    imageRepresentation: data,
+                    textRepresentation: "",
+                    storageSuffix: "output-preview.\(filenameExtension)",
+                ))
+                setNeedsLayout()
+            }
+        }
+        setNeedsLayout()
+    }
+
+    deinit { imageTask?.cancel() }
+
 }
