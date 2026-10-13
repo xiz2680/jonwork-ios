@@ -1,0 +1,52 @@
+{
+  "issue": "XIZ-129",
+  "product": "Jonwork",
+  "bundle_identifier": "com.jonwork.ios",
+  "gates": {
+    "compiler_warning_review": {
+      "status": "pending",
+      "evidence": "",
+      "detail": "Review final candidate warnings, including MLX Metal C++17 extension and cmark/AppIntents metadata diagnostics observed during local compilation. Fix product-owned warnings or record approved, scoped upstream exceptions in Linear; do not silently suppress them."
+    },
+    "gateway_contract_acceptance": {
+      "status": "pending",
+      "evidence": "",
+      "detail": "Existing independent validation recorded controlled failures in native token refresh/revoke, SSE expiry, controller lease renewal, JSONL writer isolation and restored tool projection. Active fixes must receive final-version independent contract and native journey acceptance; historical fixtures are not current-final evidence."
+    },
+    "production_sign_in": {
+      "status": "blocked",
+      "evidence": "",
+      "detail": "The 5df95a7 baseline disables production sign-in. Integrate and independently verify the active development branch's native sign-in changes before making a release candidate."
+    },
+    "account_deletion": {
+      "status": "blocked",
+      "evidence": "",
+      "detail": "The related backend supports account registration, but the app only signs out and deletes sessions. Provide a real account-deletion flow and retention/deletion contract; do not substitute token revocation."
+    },
+    "privacy_and_provider_review": {
+      "status": "pending",
+      "evidence": "",
+      "detail": "Confirm the deployed gateway/provider inventory, retention/deletion policy, consent behavior and App Privacy answers against the signed candidate."
+    },
+    "signed_archive": {
+      "status": "blocked",
+      "evidence": "",
+      "detail": "No Apple Distribution identity is currently available. The intended Developer Team, provisioning profile and validated distribution export are required."
+    },
+    "app_store_metadata": {
+      "status": "pending",
+      "evidence": "",
+      "detail": "Create or verify the owned App Store Connect app, public support/privacy URLs, age rating, screenshots, pricing/export compliance and reviewer account; run fastlane precheck against actual metadata."
+    },
+    "device_acceptance": {
+      "status": "pending",
+      "evidence": "",
+      "detail": "Verify production critical journeys on supported physical devices, accessibility sizes, VoiceOver, IPv6-only network and background/foreground recovery."
+    },
+    "testflight_acceptance": {
+      "status": "pending",
+      "evidence": "",
+      "detail": "Distribute the signed immutable candidate to internal TestFlight, independently verify its gateway/session journeys and retain rollback evidence."
+    }
+  }
+}

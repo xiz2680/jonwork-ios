@@ -4,7 +4,7 @@
 
 Jonwork iOS is a calm, professional control surface for Jonwork conversations, not a generic chatbot or a mobile copy of the web application. The active conversation is visually dominant. Navigation, ownership, model controls, usage, and recovery remain available without competing with the work.
 
-The visual baseline is the existing FlowDown UIKit interface: native typography, generous spacing, translucent materials, stable Markdown layout, folded reasoning, compact tool cards, and a grounded composer. Existing FlowDown components are reused before new UI is introduced, while Pi transport and protocol terms remain behind product-level models.
+The visual baseline is the existing Jonwork UIKit interface: native typography, generous spacing, translucent materials, stable Markdown layout, folded reasoning, compact tool cards, and a grounded composer. Existing Jonwork components are reused before new UI is introduced, while Pi transport and protocol terms remain behind product-level models.
 
 The Jonwork web home is an experience reference, not an iOS wire-contract reference. The iOS application must consume a versioned Jonwork gateway contract and fail closed when required conversation or ownership capabilities are absent.
 
@@ -42,7 +42,7 @@ Raw server URLs, tokens, provider names, protocol versions, runtime identifiers,
 - show offline, recovery, ownership, release, and compatibility states;
 - prevent duplicate mutations when the outcome of a network request is unknown.
 
-### Reuse from FlowDown
+### Reuse from Jonwork
 
 Reuse these components and their established interaction behavior:
 
@@ -57,7 +57,7 @@ Reuse these components and their established interaction behavior:
 
 ### Adapt for Jonwork
 
-- Map authoritative Jonwork message and tool identifiers into FlowDown presentation models. A row must keep one identity from start through completion.
+- Map authoritative Jonwork message and tool identifiers into Jonwork presentation models. A row must keep one identity from start through completion.
 - Back the conversation list, search, rename, delete, and resume actions with authoritative Jonwork data rather than local transient rows.
 - Replace legacy model/provider controls with a capability-gated Jonwork model, thinking-level, and context-usage surface.
 - Simplify the composer for Jonwork while keeping attachment picking, draft preservation, Dynamic Type, and hardware-keyboard behavior.
@@ -87,11 +87,11 @@ The normal user surface states what the user can do next: reconnect, sign in, up
 
 ### Remove from the iOS Product Surface
 
-- generic FlowDown multi-provider setup and provider editing;
+- generic Jonwork multi-provider setup and provider editing;
 - local MLX model download and management;
-- FlowDown web-search controls, FlowDown tool toggles, and MCP administration;
-- FlowDown iCloud conversation sync;
-- FlowDown branding, subscriptions, artwork, welcome copy, and cloud-service entry points;
+- Jonwork web-search controls, Jonwork tool toggles, and MCP administration;
+- Jonwork iCloud conversation sync;
+- Jonwork branding, subscriptions, artwork, welcome copy, and cloud-service entry points;
 - local-only duplicate, favorite, rename, delete, or search actions for Jonwork conversations when they do not update authoritative Jonwork state.
 
 ## Native Information Architecture
@@ -194,7 +194,7 @@ When more than one condition applies, the presentation priority is:
 - [ ] iPad and Catalyst use a native split view with one shared selection model.
 - [ ] The conversation list comes from authoritative Jonwork summaries and distinguishes active, resumable, released, and unavailable conversations.
 - [ ] Create, resume, switch, rename, search, and delete use authoritative Jonwork operations.
-- [ ] The timeline reuses FlowDown message, Markdown/code, reasoning, and tool views rather than introducing a parallel renderer.
+- [ ] The timeline reuses Jonwork message, Markdown/code, reasoning, and tool views rather than introducing a parallel renderer.
 - [ ] Stable remote message and tool identifiers survive start, update, completion, reconnect, and snapshot replacement.
 - [ ] Streaming text, reasoning, and tool progress do not visibly re-layout unrelated rows or move a user who has scrolled away from the bottom.
 - [ ] The composer remains usable during streaming and requires an explicit Steer or Follow Up decision before sending.
@@ -209,7 +209,7 @@ When more than one condition applies, the presentation priority is:
 - [ ] Released conversations disable mutation and provide a verified Back to Conversations action on compact and regular layouts.
 - [ ] Version mismatch or missing required capabilities fail closed without partial conversation loading or stateless-chat fallback.
 - [ ] All new user-visible strings use localization and ship in every supported locale.
-- [ ] The production surface contains no FlowDown brand copy, proprietary artwork, legacy provider controls, MLX management, iCloud conversation sync, or MCP administration.
+- [ ] The production surface contains no Jonwork brand copy, proprietary artwork, legacy provider controls, MLX management, iCloud conversation sync, or MCP administration.
 
 ## Test Acceptance Checklist
 
@@ -231,7 +231,7 @@ When more than one condition applies, the presentation priority is:
 - [ ] Measured prompt-to-first-visible-update overhead is no more than 150 ms on a healthy local network.
 - [ ] Reconnect to authoritative state completes within 3 seconds on a healthy network.
 - [ ] Long mixed-content conversation scrolling targets 60 fps without repeated multi-frame stalls or unbounded message, Markdown, attachment, or tool cache growth.
-- [ ] Production-surface inspection finds no FlowDown branding or excluded legacy capability entry point.
+- [ ] Production-surface inspection finds no Jonwork branding or excluded legacy capability entry point.
 
 ## Required Validation Evidence
 

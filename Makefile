@@ -1,14 +1,19 @@
-# FlowDown build automation
+# Jonwork build automation
 
 SHELL := /bin/bash
 .SHELLFLAGS := -o pipefail -c
 
 ROOT_DIR := $(abspath $(CURDIR))
-WORKSPACE := $(ROOT_DIR)/FlowDown.xcworkspace
-IOS_SCHEME := FlowDown
-EXTENSION_SCHEME := FlowDownTranslationProvider
+WORKSPACE := $(ROOT_DIR)/Jonwork.xcworkspace
+IOS_SCHEME := Jonwork
+EXTENSION_SCHEME := JonworkTranslationProvider
 CONFIGURATION ?= Debug
-DERIVED_DATA ?= /private/tmp/flowdown-deriveddata
+TEST_DESTINATION ?=
+TEST_ONLY ?=
+XCODEBUILD_EXTRA ?=
+ARCHIVE_PATH ?= $(ROOT_DIR)/BuildArtifacts/Jonwork-unsigned.xcarchive
+RESULT_BUNDLE_PATH ?=
+DERIVED_DATA ?= /private/tmp/jonwork-deriveddata
 BUILD_HOME := $(DERIVED_DATA)/home
 XDG_CACHE_HOME := $(DERIVED_DATA)/xdg-cache
 MODULE_CACHE := $(DERIVED_DATA)/ModuleCache.noindex
@@ -21,7 +26,7 @@ XCODEBUILD_WRAPPER := ./Resources/DevKit/scripts/run_xcodebuild.sh
 TRANSLATION_CHECK_SCRIPT := Resources/DevKit/scripts/check_untranslated.py
 TRANSLATION_STALE_SCRIPT := Resources/DevKit/scripts/check_translations.py
 
-XCODEBUILD := $(XCODEBUILD_WRAPPER) \
+XCODEBUILD = $(XCODEBUILD_WRAPPER) \
 	-workspace "$(WORKSPACE)" \
 	-configuration $(CONFIGURATION) \
 	-derivedDataPath "$(DERIVED_DATA)" \
@@ -29,15 +34,16 @@ XCODEBUILD := $(XCODEBUILD_WRAPPER) \
 	-skipPackagePluginValidation \
 	CODE_SIGNING_ALLOWED=NO \
 	CODE_SIGNING_REQUIRED=NO \
-	CODE_SIGN_IDENTITY=""
+	CODE_SIGN_IDENTITY="" \
+	$(XCODEBUILD_EXTRA)
 
 LOCALIZATION_FILES := \
-	FlowDown/Resources/Localizable.xcstrings \
-	FlowDown/Resources/InfoPlist.xcstrings \
-	FlowDownTranslationProvider/Localizable.xcstrings \
-	FlowDownTranslationProvider/InfoPlist.xcstrings \
-	FlowDownWidgets/Localizable.xcstrings \
-	FlowDownWidgets/InfoPlist.xcstrings
+	Jonwork/Resources/Localizable.xcstrings \
+	Jonwork/Resources/InfoPlist.xcstrings \
+	JonworkTranslationProvider/Localizable.xcstrings \
+	JonworkTranslationProvider/InfoPlist.xcstrings \
+	JonworkWidgets/Localizable.xcstrings \
+	JonworkWidgets/InfoPlist.xcstrings
 
 ifeq ($(dirty),1)
 	export ALLOW_DIRTY := 1
@@ -50,7 +56,7 @@ define prepare-build-dirs
 endef
 
 define run-localization-script
-	for file in $(LOCALIZATION_FILES); do \
+	set -e; for file in $(LOCALIZATION_FILES); do \
 		python3 $(1) "$$file"; \
 	done
 endef
@@ -94,6 +100,13 @@ help:
 	@echo "  archive               Archive iOS and macOS release builds"
 	@echo "  archive-ios           Archive the iOS release build"
 	@echo "  archive-macos         Archive the macOS release build"
+	@echo ""
+	@echo "Release verification:"
+	@echo "  appstore-check          Run local App Store readiness checks"
+	@echo "  appstore-check-strict   Fail when release blockers remain"
+	@echo "  archive-ios-unsigned   Build unsigned Release archive for inspection"
+	@echo "  project-list           List workspace projects and schemes"
+	@echo "  show-build-settings    Inspect the iOS app build settings"
 	@echo ""
 	@echo "Housekeeping:"
 	@echo "  chore                 Run localization hygiene and license refresh"
@@ -144,10 +157,12 @@ test: test-unit
 
 test-unit:
 	$(prepare-build-dirs)
-	DESTINATION="$$(./Resources/DevKit/scripts/get_first_ios_simulator.sh)"; \
+	DESTINATION="$(TEST_DESTINATION)"; \
+	if [ -z "$$DESTINATION" ]; then DESTINATION="$$(./Resources/DevKit/scripts/get_first_ios_simulator.sh)"; fi; \
 	$(BUILD_ENV) XCBUILD_LABEL=test-unit $(XCODEBUILD) \
 		-scheme $(IOS_SCHEME) \
 		-destination "$$DESTINATION" \
+		$(if $(TEST_ONLY),-only-testing:$(TEST_ONLY)) \
 		test
 
 test-online-e2e:
@@ -157,7 +172,9 @@ install-metal-toolchain:
 	./Resources/DevKit/scripts/install-metal-toolchain.sh
 
 package-resolve:
-	./Resources/DevKit/scripts/resolve-packages.sh
+	$(prepare-build-dirs)
+	$(BUILD_ENV) XCBUILD_LABEL=package-resolve $(XCODEBUILD) \
+		-scheme $(IOS_SCHEME) -resolvePackageDependencies
 
 package-update:
 	./Resources/DevKit/scripts/update-packages.sh
@@ -191,3 +208,37 @@ clean-build:
 
 clean: clean-build
 	rm -rf "$(DERIVED_DATA)"
+
+.PHONY: appstore-check appstore-check-strict test-release-checks test-sharing-policy test-model-exchange project-list show-build-settings archive-ios-unsigned
+appstore-check:
+	python3 Resources/DevKit/scripts/appstore_check.py
+
+appstore-check-strict:
+	python3 Resources/DevKit/scripts/appstore_check.py --strict
+
+test-release-checks:
+	python3 Resources/DevKit/scripts/test_appstore_check.py
+
+test-sharing-policy:
+	zsh Resources/DevKit/scripts/run_sharing_policy_tests.sh
+
+test-model-exchange:
+	swift test --package-path Frameworks/JonworkModelExchange
+
+project-list:
+	$(prepare-build-dirs)
+	$(BUILD_ENV) XCBUILD_LABEL=project-list $(XCODEBUILD) -scheme $(IOS_SCHEME) -list
+
+show-build-settings:
+	$(prepare-build-dirs)
+	$(BUILD_ENV) XCBUILD_LABEL=show-build-settings $(XCODEBUILD) \
+		-scheme $(IOS_SCHEME) -destination "$(IOS_DESTINATION)" -showBuildSettings
+
+archive-ios-unsigned: override CONFIGURATION = Release
+archive-ios-unsigned:
+	$(prepare-build-dirs)
+	$(BUILD_ENV) XCBUILD_LABEL=archive-ios-unsigned $(XCODEBUILD) \
+		-scheme $(IOS_SCHEME) \
+		-destination "$(IOS_DESTINATION)" \
+		-archivePath "$(ARCHIVE_PATH)" \
+		$(if $(RESULT_BUNDLE_PATH),-resultBundlePath "$(RESULT_BUNDLE_PATH)",) archive

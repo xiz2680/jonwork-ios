@@ -57,7 +57,7 @@ Pi iOS is a native control surface for Pi agent sessions. Its product promise is
 | Model controls | existing model controls | Adapt to Pi model registry; remove provider editing |
 | Web search and FlowDown tools | FlowDown-specific managers | Remove from product surface; Pi tools are authoritative |
 | Local MLX model download | local model controllers | Exclude from first release |
-| iCloud conversation sync | FlowDown storage/sync | Exclude; Pi session files are authoritative |
+| iCloud conversation sync | Jonwork storage/sync | Exclude; Pi session files are authoritative |
 
 ## Visual Quality Bar
 

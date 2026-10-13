@@ -32,7 +32,7 @@ body:
     id: appVersion
     attributes:
       label: Related version
-      description: "Open FlowDown → Settings → scroll to bottom → copy “Version 1.2.3 (123)”."
+      description: "Open Jonwork → Settings → scroll to bottom → copy “Version 1.2.3 (123)”."
       placeholder: e.g. 1.2.3 (123) or next minor
     validations:
       required: true

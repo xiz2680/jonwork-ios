@@ -18,7 +18,7 @@ Pi gateway / Pi agent runtime
 
 ## Backend Reality and Delivery Decision
 
-The versioned Jonwork gateway exposes the `pi-gateway/1.0` contract, OAuth 2 authorization-code authentication with PKCE, authoritative snapshots, replayable SSE, idempotent mutations, controller ownership, and capability/limit discovery. UIKit remains independent of the wire format: `PiServiceProtocol` is the replaceable transport boundary, `PiEventAdapter` validates ordered events, `PiSessionReducer` owns deterministic state transitions, and FlowDown views consume presentation models only.
+The versioned Jonwork gateway exposes the `pi-gateway/1.0` contract, OAuth 2 authorization-code authentication with PKCE, authoritative snapshots, replayable SSE, idempotent mutations, controller ownership, and capability/limit discovery. UIKit remains independent of the wire format: `PiServiceProtocol` is the replaceable transport boundary, `PiEventAdapter` validates ordered events, `PiSessionReducer` owns deterministic state transitions, and Jonwork views consume presentation models only.
 
 The client must fail closed when a required capability is absent. It must never silently downgrade a requested Pi agent session to stateless chat completions.
 

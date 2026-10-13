@@ -6,7 +6,7 @@ while [[ ! -d .git ]] && [[ "$(pwd)" != "/" ]]; do
     cd ..
 done
 
-if [[ -d .git ]] && [[ -d FlowDown.xcworkspace ]]; then
+if [[ -d .git ]] && [[ -d Jonwork.xcworkspace ]]; then
     echo "[*] found project root: $(pwd)"
 else
     echo "[!] could not find project root"
@@ -49,7 +49,7 @@ echo "[*] resolving packages..."
 with_retry xcodebuild -resolvePackageDependencies \
     -clonedSourcePackagesDirPath "$PACKAGE_CLONE_ROOT" \
     -workspace *.xcworkspace \
-    -scheme FlowDown |
+    -scheme Jonwork |
     xcbeautify
 
 echo "[*] scanning licenses..."
@@ -62,7 +62,7 @@ SCANNER_DIR=(
 
 # Build package name mapping from Package.resolved
 declare -A PACKAGE_NAME_MAP
-PACKAGE_RESOLVED="${PROJECT_ROOT}/FlowDown.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+PACKAGE_RESOLVED="${PROJECT_ROOT}/Jonwork.xcworkspace/xcshareddata/swiftpm/Package.resolved"
 
 # Manual corrections for packages where GitHub URL is lowercase but actual name has different casing
 declare -A MANUAL_CORRECTIONS=(
@@ -127,7 +127,7 @@ for dir in "${SCANNER_DIR[@]}"; do
     fi
 done
 
-echo -e "$SCANNED_LICENSE_CONTENT" >"$PROJECT_ROOT/FlowDown/BundledResources/OpenSourceLicenses.md"
+echo -e "$SCANNED_LICENSE_CONTENT" >"$PROJECT_ROOT/Jonwork/BundledResources/OpenSourceLicenses.md"
 
 echo "[*] checking for incompatible licenses..."
 
@@ -138,7 +138,7 @@ INCOMPATIBLE_LICENSES_KEYWORDS=(
 )
 
 for keyword in "${INCOMPATIBLE_LICENSES_KEYWORDS[@]}"; do
-    if grep -q "$keyword" "$PROJECT_ROOT/FlowDown/BundledResources/OpenSourceLicenses.md"; then
+    if grep -q "$keyword" "$PROJECT_ROOT/Jonwork/BundledResources/OpenSourceLicenses.md"; then
         echo "[!] found incompatible license: $keyword"
         exit 1
     fi

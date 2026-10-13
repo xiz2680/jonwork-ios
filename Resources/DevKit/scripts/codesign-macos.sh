@@ -6,10 +6,10 @@ set -euo pipefail
 # Env:
 #   CODE_SIGNING_IDENTITY (required)
 #   KEYCHAIN_DB (optional)
-#   ENTITLEMENTS_PATH (optional; default FlowDown/Resources/Entitlements/Entitlements-Catalyst.entitlements)
+#   ENTITLEMENTS_PATH (optional; default Jonwork/Resources/Entitlements/Entitlements-Catalyst.entitlements)
 #   EMBED_PROVISION_PROFILE (optional .provisionprofile to embed)
 # Usage:
-#   ./codesign-macos.sh /path/to/FlowDown.app
+#   ./codesign-macos.sh /path/to/Jonwork.app
 
 APP_PATH="${1:-}"
 
@@ -25,7 +25,7 @@ fi
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(cd "$SCRIPT_DIR/../../.." && pwd)
-DEFAULT_ENTITLEMENTS="${PROJECT_ROOT}/FlowDown/Resources/Entitlements/Entitlements-Catalyst.entitlements"
+DEFAULT_ENTITLEMENTS="${PROJECT_ROOT}/Jonwork/Resources/Entitlements/Entitlements-Catalyst.entitlements"
 ENTITLEMENTS_PATH="${ENTITLEMENTS_PATH:-$DEFAULT_ENTITLEMENTS}"
 
 if [[ ! -f "$ENTITLEMENTS_PATH" ]]; then

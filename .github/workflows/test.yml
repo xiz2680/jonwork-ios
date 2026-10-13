@@ -11,12 +11,12 @@ on:
       - main
   pull_request:
     paths:
-      - "FlowDown/**"
+      - "Jonwork/**"
       - "Frameworks/**"
-      - "FlowDownUnitTests/**"
+      - "JonworkTests/**"
       - "Resources/**"
-      - "FlowDown.xcodeproj/**"
-      - "FlowDown.xcworkspace/**"
+      - "Jonwork.xcodeproj/**"
+      - "Jonwork.xcworkspace/**"
       - ".github/workflows/test.yml"
       - "Makefile"
       - "Package.resolved"
@@ -57,7 +57,7 @@ jobs:
         with:
           name: test-results
           path: |
-            ~/Library/Developer/Xcode/DerivedData/*/Logs/Test/*.xcresult
+            /private/tmp/jonwork-deriveddata/Logs/Test/*.xcresult
           if-no-files-found: warn
           retention-days: 7
 

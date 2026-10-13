@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-WORKSPACE="${WORKSPACE:-FlowDown.xcworkspace}"
-SCHEME="${SCHEME:-FlowDown}"
+WORKSPACE="${WORKSPACE:-Jonwork.xcworkspace}"
+SCHEME="${SCHEME:-Jonwork}"
 
 echo "[resolve-packages] workspace: $WORKSPACE"
 echo "[resolve-packages] scheme: $SCHEME"

@@ -1,1 +1,0 @@
-../FlowDown/Backend/LiveActivity/WidgetsAttributes.swift

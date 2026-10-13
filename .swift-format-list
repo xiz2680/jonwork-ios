@@ -2,12 +2,12 @@
 # One path per line, relative to repo root. Blank lines and comments are ignored.
 
 Examples
-FlowDown
-FlowDownTranslationProvider
-FlowDownUnitTests
-FlowDownWidgets
+Jonwork
+JonworkTranslationProvider
+JonworkTests
+JonworkWidgets
 
 Frameworks/ChatClientKit
-Frameworks/FlowDownModelExchange
+Frameworks/JonworkModelExchange
 Frameworks/Logger
 Frameworks/Storage

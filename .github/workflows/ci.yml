@@ -3,12 +3,12 @@ name: Build
 on:
   pull_request:
     paths:
-      - "FlowDown/**"
+      - "Jonwork/**"
       - "Frameworks/**"
-      - "FlowDownUnitTests/**"
+      - "JonworkTests/**"
       - "Resources/**"
-      - "FlowDown.xcodeproj/**"
-      - "FlowDown.xcworkspace/**"
+      - "Jonwork.xcodeproj/**"
+      - "Jonwork.xcworkspace/**"
       - ".github/workflows/ci.yml"
       - "Makefile"
       - "Package.resolved"
@@ -23,11 +23,11 @@ jobs:
       matrix:
         include:
           - target: ios
-            scheme: FlowDown
+            scheme: Jonwork
             destination: "generic/platform=iOS"
             archive_path: BuildArtifacts/ios.xcarchive
           - target: macos
-            scheme: FlowDown
+            scheme: Jonwork
             destination: "generic/platform=macOS,variant=Mac Catalyst"
             archive_path: BuildArtifacts/macos.xcarchive
     steps:
@@ -43,34 +43,21 @@ jobs:
 
       - name: Resolve Packages (${{ matrix.target }})
         run: |
-          set -o pipefail
-          xcodebuild -downloadComponent MetalToolchain
-          xcodebuild \
-            -workspace FlowDown.xcworkspace \
-            -scheme "${{ matrix.scheme }}" \
-            -resolvePackageDependencies \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            | xcbeautify --is-ci --disable-colored-output --disable-logging
+          make install-metal-toolchain
+          make package-resolve IOS_SCHEME="${{ matrix.scheme }}"
+
+      - name: Check Release Inputs
+        run: |
+          make test-release-checks
+          make appstore-check
 
       - name: Archive (${{ matrix.target }})
         run: |
-          set -o pipefail
-          xcodebuild -downloadComponent MetalToolchain
-          mkdir -p BuildArtifacts
-          xcodebuild \
-            -workspace FlowDown.xcworkspace \
-            -scheme "${{ matrix.scheme }}" \
-            -configuration Release \
-            -destination '${{ matrix.destination }}' \
-            archive \
-            -archivePath "${{ matrix.archive_path }}" \
-            -resultBundlePath "BuildArtifacts/${{ matrix.target }}.xcresult" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            | xcbeautify --is-ci --disable-colored-output --disable-logging
+          make archive-ios-unsigned \
+            IOS_SCHEME="${{ matrix.scheme }}" \
+            IOS_DESTINATION='${{ matrix.destination }}' \
+            ARCHIVE_PATH="${{ matrix.archive_path }}" \
+            RESULT_BUNDLE_PATH="BuildArtifacts/${{ matrix.target }}.xcresult"
 
       - name: Compress Archive (${{ matrix.target }})
         run: |

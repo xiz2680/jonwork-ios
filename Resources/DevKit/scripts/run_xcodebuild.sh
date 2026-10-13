@@ -7,8 +7,8 @@ set -euo pipefail
 # compiler or test failures even when `xcodebuild` exits successfully.
 
 LABEL="${XCBUILD_LABEL:-xcodebuild}"
-RAW_LOG=$(mktemp -t "flowdown-${LABEL//\//_}.raw.XXXXXX.log")
-LOG=$(mktemp -t "flowdown-${LABEL//\//_}.XXXXXX.log")
+RAW_LOG=$(mktemp -t "jonwork-${LABEL//\//_}.raw.XXXXXX.log")
+LOG=$(mktemp -t "jonwork-${LABEL//\//_}.XXXXXX.log")
 FILTER_RE='Metal\.xctoolchain/usr/lib/swift/maccatalyst|CoreData: error: Failed to create NSXPCConnection'
 trap 'rm -f "$RAW_LOG" "$LOG"' EXIT
 

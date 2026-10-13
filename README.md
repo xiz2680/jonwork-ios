@@ -1,89 +1,57 @@
-# FlowDown
+# jonwork-ios
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="/Resources/i18n/zh-Hans/README.md">简体中文</a>
-</p>
+Jonwork is a native Swift/UIKit client for Pi agent conversations in a connected Jonwork workspace. It adapts the existing conversation, Markdown and editor components behind the Pi gateway boundary.
 
-FlowDown is a native AI chat client for Apple platforms, designed for speed, privacy, and power users. It provides a fluid, responsive interface to interact with a variety of AI models, right from your iPhone, iPad, and Mac.
+This repository is preparing for distribution. It has not been submitted to App Review. See [App Store readiness](docs/APP_STORE_READINESS.md) for verified checks and unresolved release gates. FlowDown's App Store, TestFlight, pricing and services are not Jonwork distribution channels.
 
-![Preview](./Resources/SCR-PREVIEW.png)
+## Project layout
 
-## Download
+| Path | Purpose |
+| --- | --- |
+| `Jonwork.xcworkspace` | Xcode entry point and local package overrides |
+| `Jonwork.xcodeproj` | App, test, widget and translation targets |
+| `Jonwork/` | Application, backend, UIKit, configuration and resources |
+| `JonworkTests/` | Application tests |
+| `JonworkTranslationProvider/`, `JonworkWidgets/` | Extensions |
+| `Frameworks/` | Local packages and pinned third-party submodules |
+| `Resources/DevKit/scripts/` | Build, localization, license and release tooling |
+| `docs/` | Product contracts, quality gates and release records |
+| `LandingPage/` | Upstream website reference; excluded from Jonwork distribution |
 
-[![App Store Icon](./Resources/Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg)](https://apps.apple.com/us/app/flowdown-open-fast-ai/id6740553198)
+## Development
 
-**About Pricing Update**
+Use Xcode 26.x or newer and the root Makefile. Open `Jonwork.xcworkspace`; the main scheme is `Jonwork`. Bundle IDs remain in the owned `com.jonwork.ios` namespace. Product directories/modules use `Jonwork`; the repository uses `jonwork-ios`.
 
-FlowDown is scheduled to become free this year. With growing community support and feature maturity, maintenance costs have decreased, allowing us to operate more efficiently. Before this transition, prices will be reduced in phases. All core chat features will remain free, with subscription fees applying only to future personalization options.
+```sh
+git submodule update --init --recursive
+make install-metal-toolchain
+make package-resolve
+make build-ios-simulator
+make test-unit
+make localization-check
+make test-release-checks
+make appstore-check
+```
 
-**Keep In Touch**
+Builds support isolated `DERIVED_DATA`, `TEST_DESTINATION`, `TEST_ONLY` and `XCODEBUILD_EXTRA`. Use a dedicated simulator and derived-data directory for concurrent verification.
 
-Join the public beta on [TestFlight](https://testflight.apple.com/join/StpMeybv) to try new features.
+## Release preparation
 
-To get started, FlowDown includes complimentary access to select models. For more control, you can connect to self-hosted services or OpenAI-compatible providers. Learn more in our [documentation](https://flowdown.ai/docs/).
+```sh
+make appstore-check-strict
+make archive-ios-unsigned
+```
 
-Join our community on [Discord](https://discord.gg/UHKMRyJcgc) for feedback and support.
+The strict check fails while required release evidence is missing. An unsigned archive is build/bundle inspection evidence only. Configure the intended Developer Team locally, validate distribution signing and complete internal TestFlight acceptance before submitting.
 
-## Features
+Do not commit credentials, provisioning profiles, signing keys, build outputs or screenshots containing user data.
 
-- **Privacy First**:
-  - **Nothing Collected**: FlowDown developers do not collect, store, or transmit any of your personal information or usage data. No telemetry, no crash reports.
-  - **Zero Data Retention**: All content and configurations you create remain entirely on your device or your private iCloud.
-  - **Verifiable Source**: The source code is open and available for audit. You can verify exactly what the app is doing.
-- **Native Performance**:
-  - **Built From Scratch**: Built entirely with Swift and UIKit. We open-sourced our chat interface as [LanguageModelChatUI](https://github.com/Lakr233/LanguageModelChatUI) for everyone.
-  - **Rich User Experience**: Enjoy full Markdown rendering, syntax highlighting, and a buttery-smooth interface that makes interacting with AI a pleasure.
-  - **Optimized for Apple Platforms**: Leverages Metal and MLX for efficient on-device inference and smooth UI performance.
-- **Universal Compatibility**:
-  - **OpenAI-Compatible APIs**: Connect to any service that supports the OpenAI chat completion API standard.
-  - **Self-Hosted Models**: Easily connect to local inference servers like Ollama, LM Studio, or LocalAI.
-- **Powerful Workflows**:
-  - **Vision Support**: Interact with vision-capable models.
-  - **Audio Support**: Send audio messages to compatible models using attachments.
-  - **File Attachments**: Add files and documents to your conversations.
-  - **Web Search**: Grant the AI access to real-time information from the web.
-  - **Reusable Templates**: Save and quickly reuse your favorite prompts.
-- **System Integration**:
-  - **iCloud Sync**: Seamlessly syncs your conversations, settings, and custom models across all your Apple devices.
-  - **Default Translation App**: Set FlowDown as your default translation app for seamless translation workflows.
-  - **Shortcuts**: Deep integration with system Shortcuts for automating your workflows.
-  - **Live Activity**: With sound effects enabled (customizable), you can use Live Activity to stream in the background.
-  - **Model Exchange Protocol**: Share and import model configurations easily using the `.fdmodel` file format.
+Support: [Jonwork iOS issues](https://github.com/xiz2680/jonwork-ios/issues). Do not disclose passwords, tokens or private conversations in public issues.
 
-> **Note**: FlowDown is a Zero Data Retention (ZDR) app. While the app collects no data, our website uses anonymous analytics and Cloudflare security protection to maintain service quality.
+## Source and license
 
-## Special Notes
+Jonwork derives from [FlowDown](https://github.com/Lakr233/FlowDown). Source remains under [AGPL-3.0](LICENSE); original authorship and third-party notices are retained. Upstream name, icon and artwork are not licensed as Jonwork branding. See [provenance](docs/UPSTREAM_PROVENANCE.md).
 
-FlowDown is designed for users who want full control over their AI models and are willing to configure them manually.
+Historical storage and model-exchange identifiers remain where changing them would lose data or break compatibility.
 
-Every model behaves differently based on its capabilities, deployment method, and hardware resources. You are responsible for configuring and testing each model you use. FlowDown provides the tools and interfaces—you provide the configurations.
-
-For bulk management, FlowDown supports importing and exporting model configurations (`.fdmodel` files). You can script the generation of configuration files and import them all at once. Join our [Discord](https://discord.gg/UHKMRyJcgc) to discuss setups, but remember: community advice doesn't replace your own testing.
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Lakr233/FlowDown&type=date&legend=top-left)](https://www.star-history.com/#Lakr233/FlowDown&type=date&legend=top-left)
-
-## License
-
-The source code is licensed under AGPL-3.0. You can find the full license text in the [LICENSE](./LICENSE) file.
-
-The decoupled libraries used to build, or extracted from FlowDown are listed below with their respective licenses:
-
-- [AlertController](https://github.com/Lakr233/AlertController) - MIT License
-- [ColorfulX](https://github.com/Lakr233/ColorfulX) - MIT License
-- [ListViewKit](https://github.com/Lakr233/ListViewKit) - MIT License
-- [MarkdownView](https://github.com/Lakr233/MarkdownView) - MIT License
-- [GlyphixTextFx](https://github.com/ktiays/GlyphixTextFx/) - MIT License
-- [LanguageModelChatUI](https://github.com/Lakr233/LanguageModelChatUI) - MIT License
-
-Please note that while the code is open source, the FlowDown name, icon, and artwork are proprietary. For commercial licensing inquiries, please contact us.
-
-## Sponsor
-
-[LookInside](https://lookinside-app.com/) helps you inspect a running iOS or macOS app UI from your Mac.
-
----
-
-© 2025-2026 FlowDown Team (@Lakr233) All Rights Reserved.
+[简体中文](Resources/i18n/zh-Hans/README.md)

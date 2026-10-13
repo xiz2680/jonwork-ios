@@ -97,6 +97,6 @@ widget_strings = {
     "NSHumanReadableCopyright": entry("Copyright (human-readable)", repeated(COPYRIGHT), False),
 }
 
-write_catalog(ROOT / "FlowDown/Resources/InfoPlist.xcstrings", main_strings)
-write_catalog(ROOT / "FlowDownTranslationProvider/InfoPlist.xcstrings", translation_strings)
-write_catalog(ROOT / "FlowDownWidgets/InfoPlist.xcstrings", widget_strings)
+write_catalog(ROOT / "Jonwork/Resources/InfoPlist.xcstrings", main_strings)
+write_catalog(ROOT / "JonworkTranslationProvider/InfoPlist.xcstrings", translation_strings)
+write_catalog(ROOT / "JonworkWidgets/InfoPlist.xcstrings", widget_strings)
