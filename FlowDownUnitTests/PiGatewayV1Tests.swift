@@ -89,6 +89,26 @@ struct PiGatewayV1Tests {
     }
 
     @Test
+    func `session summaries require controller and reject invalid revision or cursor`() throws {
+        let valid = #"{"items":[{"sessionId":"session-01","repositoryId":"repo-01","name":null,"revision":1,"lastEventId":"0","createdAt":"2026-10-13T08:00:00.000Z","modifiedAt":"2026-10-13T08:00:00.000Z","messageCount":0,"lifecycle":"idle","runtime":"running","run":{"status":"idle"},"controller":{"clientId":null,"leaseExpiresAt":null}}],"total":1,"authoritative":true}"#
+        let missingController = valid.replacingOccurrences(
+            of: ",\"controller\":{\"clientId\":null,\"leaseExpiresAt\":null}",
+            with: ""
+        )
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder.piGateway.decode(PiGatewayWire.SessionList.self, from: Data(missingController.utf8))
+        }
+
+        for malformed in [
+            valid.replacingOccurrences(of: "\"revision\":1", with: "\"revision\":0"),
+            valid.replacingOccurrences(of: "\"lastEventId\":\"0\"", with: "\"lastEventId\":\"01\""),
+        ] {
+            let list = try JSONDecoder.piGateway.decode(PiGatewayWire.SessionList.self, from: Data(malformed.utf8))
+            #expect(throws: PiServiceError.invalidResponse) { try list.validate() }
+        }
+    }
+
+    @Test
     func `frozen snapshot and event fixture reduce through adapter into domain timeline`() throws {
         let snapshot = try decodeFixture(PiGatewayWire.Snapshot.self, "snapshot.json")
         let events = try decodeFixture([PiGatewayWire.Event].self, "events.json")

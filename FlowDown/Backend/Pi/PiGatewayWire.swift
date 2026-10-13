@@ -230,6 +230,10 @@ enum PiGatewayWire {
 
     struct SessionSummary: Decodable, Equatable, Sendable, Identifiable {
         struct Run: Decodable, Equatable, Sendable { let status: RunStatus }
+        struct Controller: Decodable, Equatable, Sendable {
+            let clientId: String?
+            let leaseExpiresAt: Date?
+        }
         let sessionId: String
         let repositoryId: String
         let name: String?
@@ -241,6 +245,7 @@ enum PiGatewayWire {
         let lifecycle: SessionLifecycle
         let runtime: Runtime
         let run: Run
+        let controller: Controller
         var id: String { sessionId }
         var isActive: Bool { lifecycle == .running || lifecycle == .restoring }
     }
@@ -251,7 +256,15 @@ enum PiGatewayWire {
         let authoritative: Bool
 
         func validate() throws {
-            guard authoritative, total >= 0, total >= items.count else {
+            guard authoritative,
+                  total >= 0,
+                  total >= items.count,
+                  items.allSatisfy({ item in
+                      item.revision >= 1
+                          && item.messageCount >= 0
+                          && (try? EventID(item.lastEventId)) != nil
+                  })
+            else {
                 throw PiServiceError.invalidResponse
             }
         }
@@ -392,7 +405,7 @@ enum PiGatewayWire {
         func validate(sessionID: String) throws {
             guard status == .applied,
                   sessionId == sessionID,
-                  revision >= 0,
+                  revision >= 1,
                   operationId == nil,
                   responseStatus == 200,
                   deleted,

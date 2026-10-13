@@ -838,6 +838,8 @@ final class PiSessionCoordinator {
             try Task.checkCancellation()
             if let settlement = operationSettlements[conversationID]?[operationID] {
                 guard settlement.status == "completed" else {
+                    try clearPendingMutation(conversationID)
+                    operationSettlements[conversationID]?[operationID] = nil
                     if let failure = settlement.failure {
                         throw PiServiceError.gateway(code: failure.code, retryable: failure.retryable)
                     }

@@ -98,6 +98,21 @@ struct PiServiceTests {
         }
     }
 
+    @Test
+    func `delete session rejects a zero revision receipt`() async throws {
+        let service = try makeService { _ in
+            (200, #"{"status":"applied","sessionId":"session-01","revision":0,"operationId":null,"afterEventId":"11","responseStatus":200,"deleted":true}"#)
+        }
+
+        await #expect(throws: PiServiceError.invalidResponse) {
+            try await service.deleteSession(
+                sessionID: "session-01",
+                clientID: "ios-01",
+                context: .init(idempotencyKey: "delete-key-01", revision: 7)
+            )
+        }
+    }
+
     @Test(arguments: [
         #"{"items":[],"total":0,"authoritative":false}"#,
         #"{"items":[],"total":-1,"authoritative":true}"#,

@@ -292,6 +292,104 @@ struct PiSessionCoordinatorTests {
         #expect(coordinator.viewState(for: "conversation")?.conversation.thinkingLevel == "off")
     }
 
+    @Test(arguments: ["failed", "aborted"])
+    @MainActor
+    func `known terminal configuration failure clears pending and permits subsequent mutations`(
+        terminalStatus: String
+    ) async throws {
+        let stream = ControlledEventStream()
+        let store = InMemoryPendingMutationStore()
+        let reasoning = reasoningModel()
+        let replacement = attachmentModel()
+        let confirmedThinking = snapshot(
+            title: "Thinking", message: "thinking", revision: 3, lastEventID: "5",
+            model: .init(provider: reasoning.provider, id: reasoning.id), thinkingLevel: .high,
+            controllerClientID: "controller"
+        )
+        let confirmedModel = snapshot(
+            title: "Model", message: "model", revision: 4, lastEventID: "7",
+            model: .init(provider: replacement.provider, id: replacement.id), thinkingLevel: .high,
+            controllerClientID: "controller"
+        )
+        let renamed = snapshot(
+            title: "Renamed", message: "renamed", revision: 5, lastEventID: "7",
+            model: .init(provider: replacement.provider, id: replacement.id), thinkingLevel: .high,
+            controllerClientID: "controller"
+        )
+        let service = PiServiceSpy(
+            snapshots: [
+                snapshot(
+                    title: "Initial", message: "initial",
+                    model: .init(provider: reasoning.provider, id: reasoning.id)
+                ),
+                confirmedThinking,
+                confirmedModel,
+                renamed,
+            ],
+            streams: [stream.stream], models: [reasoning, replacement]
+        )
+        service.enqueueOperationIDs(["terminal", "same-action", "different-action", "rename"])
+        let (coordinator, defaults) = makeCoordinator(service: service, pendingStore: store) { _, _ in }
+        defer {
+            coordinator.unbind(conversationID: "conversation")
+            defaults.removePersistentDomain(forName: defaultsSuite)
+        }
+        bind(coordinator, conversationID: "conversation", sessionID: "session", clientID: "controller")
+        try await waitUntil { service.eventClientIDs == ["controller"] }
+        stream.yield(controllerEvent(id: "1", clientID: "controller"))
+        try await waitUntil { coordinator.viewState(for: "conversation")?.conversation.role == .controller }
+
+        let terminal = Task { try await coordinator.setThinkingLevel(.high, conversationID: "conversation") }
+        try await waitUntil { service.commands.count == 1 }
+        stream.yield(operationAcceptedEvent(id: "2", operationID: "terminal", command: "set_thinking_level"))
+        stream.yield(operationSettledEvent(id: "3", operationID: "terminal", status: terminalStatus))
+        do {
+            try await terminal.value
+            Issue.record("Expected the terminal operation to fail")
+        } catch let error as PiServiceError {
+            let expected = terminalStatus == "failed"
+                ? PiServiceError.gateway(code: "operation_failed", retryable: true)
+                : PiServiceError.gateway(code: "operation_aborted", retryable: false)
+            #expect(error == expected)
+        }
+        #expect(store.mutations.isEmpty)
+
+        let sameAction = Task { try await coordinator.setThinkingLevel(.high, conversationID: "conversation") }
+        try await waitUntil { service.commands.count == 2 }
+        stream.yield(operationAcceptedEvent(
+            id: "4", operationID: "same-action", command: "set_thinking_level", revision: 3
+        ))
+        stream.yield(operationSettledEvent(
+            id: "5", operationID: "same-action", status: "completed", revision: 3
+        ))
+        try await sameAction.value
+
+        let differentAction = Task {
+            try await coordinator.setModel(
+                provider: replacement.provider,
+                modelID: replacement.id,
+                conversationID: "conversation"
+            )
+        }
+        try await waitUntil { service.commands.count == 3 }
+        stream.yield(operationAcceptedEvent(
+            id: "6", operationID: "different-action", command: "set_model", revision: 4
+        ))
+        stream.yield(operationSettledEvent(
+            id: "7", operationID: "different-action", status: "completed", revision: 4
+        ))
+        try await differentAction.value
+
+        try await coordinator.rename("Renamed", conversationID: "conversation")
+        #expect(service.commands == [
+            .setThinkingLevel(.high),
+            .setThinkingLevel(.high),
+            .setModel(provider: replacement.provider, modelID: replacement.id),
+            .rename("Renamed"),
+        ])
+        #expect(store.mutations.isEmpty)
+    }
+
     @Test
     @MainActor
     func `configuration timeout keeps durable receipt and does not apply an optimistic snapshot`() async throws {
@@ -900,7 +998,8 @@ private func snapshot(
     lastEventID: String = "0",
     streaming: Bool = false,
     model: PiGatewayWire.Snapshot.Configuration.Model? = nil,
-    thinkingLevel: PiGatewayWire.ThinkingLevel = .off
+    thinkingLevel: PiGatewayWire.ThinkingLevel = .off,
+    controllerClientID: String? = nil
 ) -> PiGatewayWire.Snapshot {
     PiGatewayWire.Snapshot(
         contract: PiGatewayWire.contract,
@@ -911,7 +1010,7 @@ private func snapshot(
         lifecycle: .idle,
         runtime: .running,
         run: .init(status: streaming ? .running : .idle, operationId: streaming ? "operation-active" : nil),
-        controller: .init(clientId: nil, leaseExpiresAt: nil),
+        controller: .init(clientId: controllerClientID, leaseExpiresAt: nil),
         configuration: .init(model: model, thinkingLevel: thinkingLevel),
         messages: [.init(
             id: "message",
@@ -1002,16 +1101,26 @@ private func controllerEvent(id: String, clientID: String?) -> PiGatewayWire.Eve
     return try! JSONDecoder.piGateway.decode(PiGatewayWire.Event.self, from: Data(json.utf8))
 }
 
-private func operationAcceptedEvent(id: String, operationID: String, command: String) -> PiGatewayWire.Event {
-    let json = #"{"contract":"pi-gateway/1.0","id":"\#(id)","sessionId":"session","sessionRevision":2,"occurredAt":"2026-10-13T08:00:00.000Z","type":"operation.accepted","data":{"operationId":"\#(operationID)","command":"\#(command)","retryOfOperationId":null}}"#
+private func operationAcceptedEvent(
+    id: String,
+    operationID: String,
+    command: String,
+    revision: Int = 2
+) -> PiGatewayWire.Event {
+    let json = #"{"contract":"pi-gateway/1.0","id":"\#(id)","sessionId":"session","sessionRevision":\#(revision),"occurredAt":"2026-10-13T08:00:00.000Z","type":"operation.accepted","data":{"operationId":"\#(operationID)","command":"\#(command)","retryOfOperationId":null}}"#
     return try! JSONDecoder.piGateway.decode(PiGatewayWire.Event.self, from: Data(json.utf8))
 }
 
-private func operationSettledEvent(id: String, operationID: String, status: String) -> PiGatewayWire.Event {
+private func operationSettledEvent(
+    id: String,
+    operationID: String,
+    status: String,
+    revision: Int = 2
+) -> PiGatewayWire.Event {
     let error = status == "failed"
         ? #"{"code":"operation_failed","message":"Operation failed","retryable":true}"#
         : "null"
-    let json = #"{"contract":"pi-gateway/1.0","id":"\#(id)","sessionId":"session","sessionRevision":2,"occurredAt":"2026-10-13T08:00:00.100Z","type":"operation.settled","data":{"operationId":"\#(operationID)","status":"\#(status)","retryOfOperationId":null,"error":\#(error)}}"#
+    let json = #"{"contract":"pi-gateway/1.0","id":"\#(id)","sessionId":"session","sessionRevision":\#(revision),"occurredAt":"2026-10-13T08:00:00.100Z","type":"operation.settled","data":{"operationId":"\#(operationID)","status":"\#(status)","retryOfOperationId":null,"error":\#(error)}}"#
     return try! JSONDecoder.piGateway.decode(PiGatewayWire.Event.self, from: Data(json.utf8))
 }
 
@@ -1062,6 +1171,7 @@ private final class PiServiceSpy: PiServiceProtocol, @unchecked Sendable {
     private var connectedClientIDs: [String] = []
     private var cancellations = 0
     private var mutationFailures: [Error] = []
+    private var queuedOperationIDs: [String] = []
     private var contexts: [PiMutationContext] = []
     private var receiptResults: [Result<PiGatewayWire.MutationReceiptLookup, Error>] = []
     private var availableModelValues: [PiGatewayWire.Model]
@@ -1101,6 +1211,7 @@ private final class PiServiceSpy: PiServiceProtocol, @unchecked Sendable {
     var uploadKeys: [String] { lock.withLock { recordedUploadKeys } }
 
     func failNextMutation(with error: Error) { lock.withLock { mutationFailures.append(error) } }
+    func enqueueOperationIDs(_ values: [String]) { lock.withLock { queuedOperationIDs.append(contentsOf: values) } }
     func enqueueReceipt(_ result: Result<PiGatewayWire.MutationReceiptLookup, Error>) {
         lock.withLock { receiptResults.append(result) }
     }
@@ -1134,13 +1245,20 @@ private final class PiServiceSpy: PiServiceProtocol, @unchecked Sendable {
         clientID _: String,
         context: PiMutationContext
     ) async throws -> PiGatewayWire.MutationReceipt {
-        let failure = lock.withLock { () -> Error? in
+        let result = lock.withLock { () -> (Error?, String) in
             sentCommands.append(action)
             contexts.append(context)
-            return mutationFailures.isEmpty ? nil : mutationFailures.removeFirst()
+            let failure = mutationFailures.isEmpty ? nil : mutationFailures.removeFirst()
+            let operationID = queuedOperationIDs.isEmpty ? "operation" : queuedOperationIDs.removeFirst()
+            return (failure, operationID)
         }
-        if let failure { throw failure }
-        return .init(sessionId: sessionID, revision: context.revision + 1, operationId: "operation", afterEventId: "0")
+        if let failure = result.0 { throw failure }
+        return .init(
+            sessionId: sessionID,
+            revision: context.revision + 1,
+            operationId: result.1,
+            afterEventId: "0"
+        )
     }
 
     func mutationReceipt(
