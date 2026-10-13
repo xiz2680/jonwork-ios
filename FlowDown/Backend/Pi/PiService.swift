@@ -62,10 +62,10 @@ enum PiServiceError: Error, Equatable, LocalizedError {
         case .networkUnavailable: String(localized: "Jonwork is unreachable. Check your network and try again.")
         case .connectionLost: String(localized: "The Jonwork connection was interrupted. Reconnecting…")
         case .invalidResponse: String(localized: "Jonwork returned an unexpected response.")
-        case .unsupportedGatewayVersion: String(localized: "This server uses an unsupported Pi Gateway version.")
+        case .unsupportedGatewayVersion: String(localized: "Jonwork needs an update before it can connect.")
         case .unsupportedAuthentication: String(localized: "This server does not support secure native sign-in.")
-        case let .capabilityUnavailable(capabilities):
-            "This server is missing required Pi capabilities: \(capabilities.joined(separator: ", "))."
+        case .capabilityUnavailable:
+            String(localized: "This workspace is not ready for conversations. Contact your administrator.")
         case .gateway: String(localized: "Jonwork could not complete the request.")
         case .replayCursorExpired: String(localized: "Conversation history must be restored from the server.")
         case .mutationNotFound: String(localized: "The previous request is no longer retained by the server.")

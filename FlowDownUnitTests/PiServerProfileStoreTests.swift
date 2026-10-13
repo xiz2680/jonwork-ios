@@ -96,7 +96,7 @@ struct PiServerProfileStoreTests {
 
     @Test
     @MainActor
-    func `server screen exposes explicit saved-token removal without revealing token`() async throws {
+    func `workspace screen exposes sign out without revealing credentials`() async throws {
         let context = makeContext()
         defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
         let url = try #require(URL(string: "https://pi.example.test"))
@@ -107,11 +107,26 @@ struct PiServerProfileStoreTests {
         )
         controller.loadViewIfNeeded()
 
-        let cell = controller.tableView(
+        #expect(controller.tableView(controller.tableView, numberOfRowsInSection: 0) == 2)
+        #expect(SettingController.SettingContent.PiServerController.defaultBaseURL.absoluteString == "https://agent.jonwork.com")
+        let defaultBaseURL = SettingController.SettingContent.PiServerController.connectionBaseURL(savedProfile: nil)
+        #expect(defaultBaseURL.absoluteString == "https://agent.jonwork.com")
+        #expect(SettingController.SettingContent.PiServerController.connectionBaseURL(
+            savedProfile: PiServerProfile(baseURL: url, token: nil)
+        ) == url)
+
+        let signInCell = controller.tableView(
             controller.tableView,
-            cellForRowAt: IndexPath(row: 2, section: 0)
+            cellForRowAt: IndexPath(row: 0, section: 0)
         )
-        #expect((cell.contentConfiguration as? UIListContentConfiguration)?.text == String(localized: "Remove Saved Token"))
+        #expect((signInCell.contentConfiguration as? UIListContentConfiguration)?.text == String(localized: "Sign In"))
+        #expect(signInCell.contentView.subviews.contains { $0 is UITextField } == false)
+
+        let signOutCell = controller.tableView(
+            controller.tableView,
+            cellForRowAt: IndexPath(row: 1, section: 0)
+        )
+        #expect((signOutCell.contentConfiguration as? UIListContentConfiguration)?.text == String(localized: "Sign Out"))
         #expect(controller.hasSavedToken)
 
         await controller.removeSavedToken()

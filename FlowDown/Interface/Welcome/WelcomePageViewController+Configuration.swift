@@ -44,8 +44,8 @@ extension WelcomePageViewController.Configuration {
                 ),
                 .init(
                     icon: UIImage(systemName: "folder.fill")!,
-                    title: "Choose a Repository",
-                    detail: "Open the repository and active work available to your account.",
+                    title: "Choose a Project",
+                    detail: "Open the project and active work available to your account.",
                 ),
                 .init(
                     icon: UIImage(systemName: "arrow.trianglehead.2.clockwise.rotate.90")!,
@@ -55,7 +55,7 @@ extension WelcomePageViewController.Configuration {
                 .init(
                     icon: UIImage(systemName: "lock.shield.fill")!,
                     title: "Workspace Access",
-                    detail: "Jonwork only shows repositories and conversations authorized for your account.",
+                    detail: "Jonwork only shows projects and conversations authorized for your account.",
                 ),
             ],
         )

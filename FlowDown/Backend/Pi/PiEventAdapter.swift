@@ -15,7 +15,7 @@ enum PiAdapterError: Error, Equatable, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unsupportedContract: String(localized: "The server uses an unsupported Pi Gateway version.")
+        case .unsupportedContract: String(localized: "Jonwork needs an update before it can connect.")
         case .unknownEnvelopeField, .unknownEventType, .invalidPayload:
             String(localized: "The server sent an unsupported event.")
         case .invalidEventID, .duplicateEvent, .outOfOrderEvent, .eventGap,

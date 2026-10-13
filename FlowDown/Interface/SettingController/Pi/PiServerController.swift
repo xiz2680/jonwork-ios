@@ -5,6 +5,12 @@ import UIKit
 
 extension SettingController.SettingContent {
     final class PiServerController: UITableViewController {
+        static let defaultBaseURL = URL(string: "https://agent.jonwork.com")!
+
+        static func connectionBaseURL(savedProfile: PiServerProfile?) -> URL {
+            savedProfile?.baseURL ?? defaultBaseURL
+        }
+
         private enum Section: Int, CaseIterable {
             case connection
             case repositories
@@ -26,16 +32,11 @@ extension SettingController.SettingContent {
             self?.view.window ?? ASPresentationAnchor()
         }
 
-        private lazy var serverField = makeField(
-            placeholder: String(localized: "Pi server URL"),
-            keyboardType: .URL,
-            contentType: .URL
-        )
         init(profileStore: PiServerProfileStore = PiServerProfileStore(), autoConnect: Bool = true) {
             domainCoordinator = PiServerDomainCoordinator(profileStore: profileStore)
             self.autoConnect = autoConnect
             super.init(style: .insetGrouped)
-            title = String(localized: "Pi Server")
+            title = String(localized: "Jonwork Workspace")
         }
 
         @available(*, unavailable)
@@ -45,16 +46,12 @@ extension SettingController.SettingContent {
 
         override func viewDidLoad() {
             super.viewDidLoad()
-            tableView.keyboardDismissMode = .interactive
             tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
             navigationItem.largeTitleDisplayMode = .never
             do {
-                if let profile = try domainCoordinator.savedProfile() {
-                    serverField.text = profile.baseURL.absoluteString
+                if try domainCoordinator.savedProfile() != nil {
                     hasSavedToken = try domainCoordinator.hasSavedCredentials()
                     if autoConnect { startConnect() }
-                } else {
-                    serverField.text = "http://localhost:4317"
                 }
             } catch {
                 presentError(error)
@@ -75,7 +72,7 @@ extension SettingController.SettingContent {
 
         override func tableView(_: UITableView, numberOfRowsInSection section: Int) -> Int {
             switch Section(rawValue: section) {
-            case .connection: 3
+            case .connection: 2
             case .repositories: max(repositories.count, 1) + (selectedRepository == nil ? 0 : 1)
             case .sessions: max(sessions.count, 1)
             case nil: 0
@@ -85,15 +82,15 @@ extension SettingController.SettingContent {
         override func tableView(_: UITableView, titleForHeaderInSection section: Int) -> String? {
             switch Section(rawValue: section) {
             case .connection: String(localized: "Connection")
-            case .repositories: String(localized: "Repositories")
-            case .sessions: String(localized: "Recent Sessions")
+            case .repositories: String(localized: "Projects")
+            case .sessions: String(localized: "Recent Conversations")
             case nil: nil
             }
         }
 
         override func tableView(_: UITableView, titleForFooterInSection section: Int) -> String? {
             guard Section(rawValue: section) == .connection else { return nil }
-            return String(localized: "Tokens are stored in Keychain. HTTPS is required outside local development.")
+            return String(localized: "Sign in securely to access your workspace.")
         }
 
         override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -103,20 +100,16 @@ extension SettingController.SettingContent {
             cell.accessoryType = .none
             cell.accessoryView = nil
             cell.selectionStyle = .default
-            cell.contentView.subviews.filter { $0 is UITextField }.forEach { $0.removeFromSuperview() }
 
             switch Section(rawValue: indexPath.section) {
             case .connection:
                 if indexPath.row == 0 {
-                    configure(cell, with: serverField)
-                    serverField.isEnabled = !isSigningOut
-                } else if indexPath.row == 1 {
-                    configuration.text = isLoading ? String(localized: "Connecting…") : String(localized: "Connect")
+                    configuration.text = isLoading ? String(localized: "Signing In…") : String(localized: "Sign In")
                     configuration.textProperties.color = isLoading || isSigningOut ? .secondaryLabel : .tintColor
                     configuration.image = UIImage(systemName: isLoading ? "arrow.triangle.2.circlepath" : "network")
                     cell.selectionStyle = isLoading || isSigningOut ? .none : .default
                 } else {
-                    configuration.text = String(localized: "Remove Saved Token")
+                    configuration.text = String(localized: "Sign Out")
                     configuration.textProperties.color = hasSavedToken ? .systemRed : .secondaryLabel
                     configuration.image = UIImage(systemName: "key.slash")
                     cell.selectionStyle = hasSavedToken && !isSigningOut ? .default : .none
@@ -124,25 +117,24 @@ extension SettingController.SettingContent {
             case .repositories:
                 if repositories.isEmpty {
                     configuration.text = !isConnected
-                        ? String(localized: "Connect to load repositories")
-                        : String(localized: "No repositories found")
+                        ? String(localized: "Sign in to load projects")
+                        : String(localized: "No projects found")
                     configuration.textProperties.color = .secondaryLabel
                     cell.selectionStyle = .none
                 } else if indexPath.row < repositories.count {
                     let repository = repositories[indexPath.row]
                     configuration.text = repository.displayName
-                    configuration.secondaryText = repository.id
                     cell.accessoryType = repository.id == selectedRepository ? .checkmark : .none
                 } else {
-                    configuration.text = String(localized: "New Pi Conversation")
+                    configuration.text = String(localized: "New Conversation")
                     configuration.textProperties.color = .tintColor
                     configuration.image = UIImage(systemName: "plus.bubble")
                 }
             case .sessions:
                 if sessions.isEmpty {
                     configuration.text = !isConnected
-                        ? String(localized: "Connect to load sessions")
-                        : String(localized: "No recent sessions")
+                        ? String(localized: "Sign in to load conversations")
+                        : String(localized: "No recent conversations")
                     configuration.textProperties.color = .secondaryLabel
                     cell.selectionStyle = .none
                 } else {
@@ -165,9 +157,9 @@ extension SettingController.SettingContent {
         override func tableView(_: UITableView, didSelectRowAt indexPath: IndexPath) {
             tableView.deselectRow(at: indexPath, animated: true)
             switch Section(rawValue: indexPath.section) {
-            case .connection where indexPath.row == 1:
+            case .connection where indexPath.row == 0:
                 startConnect()
-            case .connection where indexPath.row == 2 && hasSavedToken && !isSigningOut:
+            case .connection where indexPath.row == 1 && hasSavedToken && !isSigningOut:
                 confirmRemoveSavedToken()
             case .repositories where !repositories.isEmpty && indexPath.row < repositories.count:
                 selectedRepository = repositories[indexPath.row].id
@@ -183,11 +175,8 @@ extension SettingController.SettingContent {
 
         private func connect() async {
             guard !isLoading, !isSigningOut else { return }
-            view.endEditing(true)
             do {
-                guard let rawURL = serverField.text?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      let url = URL(string: rawURL)
-                else { throw PiServerDomainError.invalidServerURL }
+                let url = Self.connectionBaseURL(savedProfile: try domainCoordinator.savedProfile())
                 setLoading(true)
                 defer { setLoading(false) }
                 let presentation = try await domainCoordinator.authenticate(baseURL: url, authorizer: oauthClient)
@@ -215,11 +204,11 @@ extension SettingController.SettingContent {
 
         private func confirmRemoveSavedToken() {
             let alert = AlertViewController(
-                title: "Remove Saved Token?",
-                message: "The saved token will be deleted from this device."
+                title: "Sign Out?",
+                message: "Your sign-in information will be removed from this device."
             ) { context in
                 context.addAction(title: "Cancel") { context.dispose() }
-                context.addAction(title: "Remove Token", attribute: .accent) { [weak self] in
+                context.addAction(title: "Sign Out", attribute: .accent) { [weak self] in
                     context.dispose()
                     Task { await self?.removeSavedToken() }
                 }
@@ -286,7 +275,7 @@ extension SettingController.SettingContent {
                     conversation.update(
                         \.title,
                         to: summary?.name?.nilIfBlank
-                            ?? String(localized: "New Pi Conversation")
+                            ?? String(localized: "New Conversation")
                     )
                     conversation.update(\.modelId, to: "pi:\(createdSession.sessionID)")
                     conversation.update(\.shouldAutoRename, to: false)
@@ -312,40 +301,9 @@ extension SettingController.SettingContent {
             tableView.reloadSections(IndexSet(integer: Section.connection.rawValue), with: .none)
         }
 
-        private func configure(_ cell: UITableViewCell, with field: UITextField) {
-            cell.selectionStyle = .none
-            cell.contentView.addSubview(field)
-            field.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                field.leadingAnchor.constraint(equalTo: cell.contentView.layoutMarginsGuide.leadingAnchor),
-                field.trailingAnchor.constraint(equalTo: cell.contentView.layoutMarginsGuide.trailingAnchor),
-                field.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: 8),
-                field.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor, constant: -8),
-            ])
-        }
-
-        private func makeField(
-            placeholder: String,
-            keyboardType: UIKeyboardType,
-            contentType: UITextContentType,
-            secure: Bool = false
-        ) -> UITextField {
-            let field = UITextField()
-            field.placeholder = placeholder
-            field.font = .preferredFont(forTextStyle: .body)
-            field.adjustsFontForContentSizeCategory = true
-            field.keyboardType = keyboardType
-            field.textContentType = contentType
-            field.autocapitalizationType = .none
-            field.autocorrectionType = .no
-            field.isSecureTextEntry = secure
-            field.clearButtonMode = .whileEditing
-            return field
-        }
-
         private func presentError(_ error: Error) {
             let alert = AlertViewController(
-                title: "Pi",
+                title: "Jonwork",
                 message: "\(error.localizedDescription)"
             ) { context in
                 context.allowSimpleDispose()

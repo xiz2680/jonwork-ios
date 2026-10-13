@@ -2,7 +2,7 @@
 
 Jonwork stores app preferences and local conversation metadata on your device. Workspace credentials are stored in the Apple Keychain. The app does not include advertising, cross-app tracking, or third-party analytics SDKs.
 
-Messages, attachments, tool requests, and conversation controls are sent to the workspace service you connect to. Conversation sessions and results may be retained by that service, and relevant data may be processed by model or tool providers configured by the workspace operator.
+Messages, attachments, tool requests, and conversation controls are sent to the workspace service you connect to. Conversations and results may be retained by that service, and relevant data may be processed by model or tool providers configured by the workspace operator.
 
 If you use voice dictation, audio is processed by Apple's speech recognition service according to Apple's privacy policy.
 
