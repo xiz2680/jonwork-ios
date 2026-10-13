@@ -131,12 +131,14 @@ struct PiServerProfileStoreTests {
     }
 
     @Test
-    func `bundled deployment configurations select isolated gateway domains`() throws {
+    func `bundled deployment configurations select their configured gateway domains`() throws {
         for environment in PiGatewayDeploymentConfiguration.Environment.allCases {
             let configuration = try gatewayConfiguration(environment)
             #expect(configuration.environment == environment)
             #expect(configuration.baseURL == environment.requiredBaseURL)
         }
+        #expect(PiGatewayDeploymentConfiguration.Environment.debug.requiredBaseURL.absoluteString == "https://jonwork.com")
+        #expect(PiGatewayDeploymentConfiguration.Environment.production.requiredBaseURL.absoluteString == "https://jonwork.com")
         #expect(PiGatewayDeploymentConfiguration.Environment.production.requiredBaseURL !=
             PiGatewayDeploymentConfiguration.Environment.productionCandidate.requiredBaseURL)
     }
@@ -152,7 +154,7 @@ struct PiServerProfileStoreTests {
     func `deployment configuration rejects a domain belonging to another environment`() throws {
         let info: [String: Any] = [
             PiGatewayDeploymentConfiguration.environmentInfoKey: "production-candidate",
-            PiGatewayDeploymentConfiguration.baseURLInfoKey: "https://agent.jonwork.com",
+            PiGatewayDeploymentConfiguration.baseURLInfoKey: "https://jonwork.com",
         ]
         #expect(throws: PiGatewayDeploymentConfigurationError.environmentURLMismatch) {
             try PiGatewayDeploymentConfiguration.resolve(infoDictionary: info)

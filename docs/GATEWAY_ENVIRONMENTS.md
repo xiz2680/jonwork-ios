@@ -4,12 +4,12 @@ Jonwork selects its Gateway at build time. There is no runtime server-address fi
 
 | Xcode configuration | Deployment label | Gateway |
 |---|---|---|
-| `Debug` | `debug` | `https://debug.agent.jonwork.com` |
+| `Debug` | `debug` | `https://jonwork.com` |
 | `QA` | `qa` | `https://qa.agent.jonwork.com` |
 | `ProductionCandidate` | `production-candidate` | `https://candidate.agent.jonwork.com` |
-| `Release` | `production` | `https://agent.jonwork.com` |
+| `Release` | `production` | `https://jonwork.com` |
 
-The environment and URL are supplied by the checked-in xcconfig files and embedded in the app Info.plist. Runtime validation requires HTTPS and an exact environment-to-domain match. These files contain no OAuth client secret, bearer token, model credential, or signing credential.
+The environment and URL are supplied by the checked-in xcconfig files and embedded in the app Info.plist. Runtime validation requires HTTPS and an exact environment-to-domain match. Per the user request, Debug and Release both connect directly to jonwork.com; QA and ProductionCandidate retain their dedicated endpoints. These files contain no OAuth client secret, bearer token, model credential, or signing credential.
 
 ## Reproduce a fresh candidate install
 
@@ -33,4 +33,4 @@ make build-ios-simulator CONFIGURATION=Release DERIVED_DATA=/private/tmp/jonwork
 plutil -p /private/tmp/jonwork-production-deriveddata/Build/Products/Release-iphonesimulator/Jonwork.app/Info.plist | grep JonworkGateway
 ```
 
-The production plist must show `production` and `https://agent.jonwork.com`; it must not contain the candidate hostname.
+The production plist must show `production` and `https://jonwork.com`; it must not contain the candidate hostname.

@@ -9,10 +9,10 @@ struct PiGatewayDeploymentConfiguration: Equatable, Sendable {
 
         var requiredBaseURL: URL {
             switch self {
-            case .debug: URL(string: "https://debug.agent.jonwork.com")!
+            case .debug: URL(string: "https://jonwork.com")!
             case .qa: URL(string: "https://qa.agent.jonwork.com")!
             case .productionCandidate: URL(string: "https://candidate.agent.jonwork.com")!
-            case .production: URL(string: "https://agent.jonwork.com")!
+            case .production: URL(string: "https://jonwork.com")!
             }
         }
     }

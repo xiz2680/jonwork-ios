@@ -151,7 +151,7 @@ def check_source(root):
     if "com.jonwork.ios" not in project:
         errors.append("Missing product-owned bundle identifier.")
     release_config = (root / "Jonwork/Configuration/Release.xcconfig").read_text()
-    if "agent.jonwork.com" not in release_config or "ENVIRONMENT = production;" not in release_config:
+    if not re.search(r"^JONWORK_GATEWAY_BASE_URL\s*=\s*https:/\$\(\)/jonwork\.com;\s*$", release_config, re.MULTILINE) or not re.search(r"^JONWORK_GATEWAY_ENVIRONMENT\s*=\s*production;\s*$", release_config, re.MULTILINE):
         errors.append("Release gateway must use the production deployment configuration.")
     for path in (
         "Jonwork.xcworkspace/contents.xcworkspacedata",
@@ -182,7 +182,7 @@ def check_bundle(app):
             errors.append("Built app does not use the production bundle identifier.")
         if info.get("CFBundleDisplayName") != "Jonwork":
             errors.append("Built app display name is not Jonwork.")
-        if info.get("JonworkGatewayBaseURL") != "https://agent.jonwork.com":
+        if info.get("JonworkGatewayBaseURL") != "https://jonwork.com":
             errors.append("Built app is not configured for the production gateway.")
         errors.extend(validate_info(info))
         errors.extend(validate_manifest(plistlib.loads((app / "PrivacyInfo.xcprivacy").read_bytes())))
