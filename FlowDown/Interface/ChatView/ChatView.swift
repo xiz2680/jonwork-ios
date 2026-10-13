@@ -404,12 +404,19 @@ class ChatView: UIView {
             return
         }
 
+            let attachmentPolicy = PiSessionCoordinator.shared.attachmentPolicy(
+                conversationID: conversationIdentifier
+            )
             editor.setJonworkConversation(
                 true,
-                attachmentsEnabled: PiSessionCoordinator.shared.canAttach(conversationID: conversationIdentifier),
-                attachmentMaximumBytes: PiSessionCoordinator.shared.attachmentMaximumBytes(
-                    conversationID: conversationIdentifier
-                )
+                allowsImageAttachments: attachmentPolicy?.allowsImages == true,
+                allowsFileAttachments: attachmentPolicy?.allowsFiles == true,
+                allowsCamera: attachmentPolicy?.allowsCamera == true,
+                allowsPhotoLibrary: attachmentPolicy?.allowsPhotoLibrary == true,
+                allowsFilePicker: attachmentPolicy?.allowsFilePicker == true,
+                attachmentMaximumBytes: attachmentPolicy?.maximumBytes,
+                attachmentMaximumCount: attachmentPolicy?.maximumCount ?? 0,
+                attachmentMediaTypes: attachmentPolicy?.mediaTypes ?? []
             )
 
         if let viewState = PiSessionCoordinator.shared.viewState(for: conversationIdentifier) {
@@ -472,6 +479,73 @@ class ChatView: UIView {
         }
         let state = viewState.conversation
         var actions: [UIMenuElement] = []
+        let mutationPending = viewState.pendingAction != nil
+        if viewState.pendingAction == .takeover {
+            actions.append(UIAction(
+                title: String(localized: "Taking Control…"),
+                image: UIImage(systemName: "hourglass"),
+                attributes: .disabled
+            ) { _ in })
+        }
+        if state.role == .controller, !state.isReleased {
+            let models = PiSessionCoordinator.shared.models(conversationID: conversationIdentifier)
+            let modelActions = models.map { model in
+                UIAction(
+                    title: model.name,
+                    state: state.model?.provider == model.provider && state.model?.id == model.id ? .on : .off
+                ) { [weak self] _ in
+                    Task {
+                        await self?.performPiAction {
+                            try await PiSessionCoordinator.shared.setModel(
+                                provider: model.provider,
+                                modelID: model.id,
+                                conversationID: conversationIdentifier
+                            )
+                        }
+                    }
+                }
+            }
+            actions.append(UIMenu(
+                title: String(localized: "Model"),
+                image: UIImage(systemName: "cpu"),
+                options: .displayInline,
+                children: modelActions
+            ))
+            if let model = PiSessionCoordinator.shared.selectedModel(conversationID: conversationIdentifier),
+               !model.thinkingLevels.isEmpty
+            {
+                let thinkingActions = model.thinkingLevels.map { level in
+                    UIAction(
+                        title: level.rawValue.capitalized,
+                        state: state.thinkingLevel == level.rawValue ? .on : .off
+                    ) { [weak self] _ in
+                        Task {
+                            await self?.performPiAction {
+                                try await PiSessionCoordinator.shared.setThinkingLevel(
+                                    level,
+                                    conversationID: conversationIdentifier
+                                )
+                            }
+                        }
+                    }
+                }
+                actions.append(UIMenu(
+                    title: String(localized: "Thinking"),
+                    image: UIImage(systemName: "brain"),
+                    options: .displayInline,
+                    children: thinkingActions
+                ))
+            }
+            actions.append(UIAction(
+                title: String(localized: "Rename"),
+                image: UIImage(systemName: "pencil")
+            ) { [weak self] _ in
+                self?.presentPiRename(
+                    conversationID: conversationIdentifier,
+                    currentName: ConversationManager.shared.conversation(identifier: conversationIdentifier)?.title
+                )
+            })
+        }
         if state.role == .controller, state.isStreaming {
             actions.append(UIAction(
                 title: String(localized: "Stop Response"),
@@ -488,7 +562,7 @@ class ChatView: UIView {
                 Task { await self?.performPiAction { try await PiSessionCoordinator.shared.retry(conversationID: conversationIdentifier) } }
             })
         }
-        if state.role == .viewer, !state.isStreaming {
+        if state.role == .viewer, !state.isStreaming, !mutationPending {
             actions.append(UIAction(
                 title: String(localized: "Edit on This Device"),
                 image: UIImage(systemName: "hand.raised")
@@ -528,7 +602,36 @@ class ChatView: UIView {
         )
         alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
         alert.addAction(UIAlertAction(title: String(localized: "Continue"), style: .destructive) { [weak self] _ in
-            Task { await self?.performPiAction { try await PiSessionCoordinator.shared.release(conversationID: conversationID) } }
+            Task {
+                await self?.performPiAction {
+                    try await PiSessionCoordinator.shared.release(conversationID: conversationID)
+                    SettingController.setNextEntryPage(.piServer)
+                    self?.parentViewController?.present(SettingController(), animated: true)
+                }
+            }
+        })
+        parentViewController?.present(alert, animated: true)
+    }
+
+    private func presentPiRename(conversationID: Conversation.ID, currentName: String?) {
+        let alert = UIAlertController(
+            title: String(localized: "Rename"),
+            message: nil,
+            preferredStyle: .alert
+        )
+        alert.addTextField { $0.text = currentName }
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Rename"), style: .default) { [weak self, weak alert] _ in
+            guard let name = alert?.textFields?.first?.text else { return }
+            Task {
+                await self?.performPiAction {
+                    try await PiSessionCoordinator.shared.rename(name, conversationID: conversationID)
+                    ConversationManager.shared.editConversation(identifier: conversationID) {
+                        $0.update(\.title, to: name.trimmingCharacters(in: .whitespacesAndNewlines))
+                        $0.update(\.shouldAutoRename, to: false)
+                    }
+                }
+            }
         })
         parentViewController?.present(alert, animated: true)
     }

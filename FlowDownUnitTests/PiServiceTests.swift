@@ -60,6 +60,30 @@ struct PiServiceTests {
     }
 
     @Test
+    func `delete session sends fenced idempotent request and requires deleted receipt`() async throws {
+        let service = try makeService(token: "secret") { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(request.url?.path == "/v1/sessions/session-01")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer secret")
+            #expect(request.value(forHTTPHeaderField: "Idempotency-Key") == "delete-key-01")
+            #expect(request.value(forHTTPHeaderField: "If-Match") == "\"7\"")
+            #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+            let body = try #require(try piServiceRequestBody(request))
+            let payload = try JSONDecoder().decode([String: String].self, from: body)
+            #expect(payload == ["clientId": "ios-01"])
+            return (200, #"{"status":"applied","sessionId":"session-01","revision":8,"operationId":null,"afterEventId":"11","responseStatus":200,"deleted":true}"#)
+        }
+
+        let receipt = try await service.deleteSession(
+            sessionID: "session-01",
+            clientID: "ios-01",
+            context: .init(idempotencyKey: "delete-key-01", revision: 7)
+        )
+        #expect(receipt.deleted == true)
+        #expect(receipt.revision == 8)
+    }
+
+    @Test
     func `authentication response maps to actionable typed error`() async throws {
         let service = try makeService { _ in
             (401, #"{"error":"invalid token"}"#)
@@ -151,6 +175,22 @@ struct PiServiceTests {
             session: session
         )
     }
+}
+
+private func piServiceRequestBody(_ request: URLRequest) throws -> Data? {
+    if let body = request.httpBody { return body }
+    guard let stream = request.httpBodyStream else { return nil }
+    stream.open()
+    defer { stream.close() }
+    var data = Data()
+    var buffer = [UInt8](repeating: 0, count: 1024)
+    while true {
+        let count = stream.read(&buffer, maxLength: buffer.count)
+        guard count >= 0 else { throw stream.streamError ?? PiServiceError.invalidResponse }
+        if count == 0 { break }
+        data.append(contentsOf: buffer.prefix(count))
+    }
+    return data
 }
 
 private final class PiURLProtocolStub: URLProtocol, @unchecked Sendable {

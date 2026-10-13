@@ -66,13 +66,43 @@ final class PiSessionCoordinator {
 
     enum ConnectionPhase: Equatable, Sendable {
         case connecting
+        case restoring
         case connected
         case offline(String)
     }
 
     struct ViewState: Equatable, Sendable {
+        enum PendingAction: Equatable, Sendable {
+            case takeover
+            case other
+        }
+
         let conversation: PiConversationState
         let connection: ConnectionPhase
+        let pendingAction: PendingAction?
+
+        init(
+            conversation: PiConversationState,
+            connection: ConnectionPhase,
+            pendingAction: PendingAction? = nil
+        ) {
+            self.conversation = conversation
+            self.connection = connection
+            self.pendingAction = pendingAction
+        }
+    }
+
+    struct AttachmentPolicy: Equatable, Sendable {
+        let allowsImages: Bool
+        let allowsFiles: Bool
+        let allowsCamera: Bool
+        let allowsPhotoLibrary: Bool
+        let allowsFilePicker: Bool
+        let mediaTypes: Set<String>
+        let maximumBytes: Int
+        let maximumCount: Int
+
+        var allowsAny: Bool { allowsImages || allowsFiles }
     }
 
     private let bindingsKey = "Pi.Session.Bindings"
@@ -87,6 +117,7 @@ final class PiSessionCoordinator {
     private var discoveries: [Conversation.ID: PiGatewayWire.Discovery] = [:]
     private var availableModels: [Conversation.ID: [PiGatewayWire.Model]] = [:]
     private var mutationsInFlight: Set<Conversation.ID> = []
+    private var pendingActions: [Conversation.ID: ViewState.PendingAction] = [:]
     private let pendingMutationStore: any PiPendingMutationStoring
     private var pendingMutationStoreLoadFailed = false
     private var pendingMutations: [Conversation.ID: PiPendingMutationRecord] = [:]
@@ -152,8 +183,17 @@ final class PiSessionCoordinator {
         }
         return .init(
             conversation: conversation,
-            connection: phases[conversationID] ?? .connecting
+            connection: phases[conversationID] ?? .connecting,
+            pendingAction: pendingActions[conversationID]
         )
+    }
+
+    func conversationID(sessionID: String, repository: String, baseURL: URL) -> Conversation.ID? {
+        bindings.first(where: {
+            $0.value.sessionID == sessionID
+                && $0.value.repository == repository
+                && $0.value.baseURL == baseURL
+        })?.key
     }
 
     func bind(
@@ -163,6 +203,13 @@ final class PiSessionCoordinator {
         clientID: String,
         baseURL: URL
     ) {
+        for (existingConversationID, binding) in bindings where existingConversationID != conversationID
+            && binding.sessionID == sessionID
+            && binding.repository == repository
+            && binding.baseURL == baseURL
+        {
+            unbind(conversationID: existingConversationID)
+        }
         cancelConnection(conversationID)
         bindings[conversationID] = .init(
             sessionID: sessionID,
@@ -189,6 +236,7 @@ final class PiSessionCoordinator {
         discoveries[conversationID] = nil
         availableModels[conversationID] = nil
         mutationsInFlight.remove(conversationID)
+        pendingActions[conversationID] = nil
         var retained = pendingMutations
         retained[conversationID] = nil
         do {
@@ -212,6 +260,7 @@ final class PiSessionCoordinator {
         discoveries.removeAll()
         availableModels.removeAll()
         mutationsInFlight.removeAll()
+        pendingActions.removeAll()
         pendingMutations.removeAll()
         try? persistPendingMutations()
         lastMutationReceipts.removeAll()
@@ -290,7 +339,7 @@ final class PiSessionCoordinator {
               eventTasks[conversationID] == nil
         else { return }
         let generation = nextGeneration(for: conversationID)
-        phases[conversationID] = .connecting
+        phases[conversationID] = reducers[conversationID] == nil ? .restoring : .connecting
         notify(conversationID)
 
         eventTasks[conversationID] = Task { [weak self] in
@@ -377,7 +426,7 @@ final class PiSessionCoordinator {
                         return
                     }
                     guard isCurrent(conversationID, binding: binding, generation: generation) else { return }
-                    phases[conversationID] = .connecting
+                    phases[conversationID] = .restoring
                     notify(conversationID)
                 }
             }
@@ -483,22 +532,64 @@ final class PiSessionCoordinator {
     }
 
     func supportsAttachments(conversationID: Conversation.ID, kind: PiAttachmentUpload.Kind) -> Bool {
-        guard let discovery = discoveries[conversationID] else { return false }
+        guard let policy = attachmentPolicy(conversationID: conversationID) else { return false }
         switch kind {
-        case .image: return discovery.capabilities.attachments.images
-        case .file: return discovery.capabilities.attachments.files
+        case .image: return policy.allowsImages
+        case .file: return policy.allowsFiles
         }
     }
 
     func canAttach(conversationID: Conversation.ID) -> Bool {
+        attachmentPolicy(conversationID: conversationID)?.allowsAny == true
+    }
+
+    func attachmentPolicy(conversationID: Conversation.ID) -> AttachmentPolicy? {
+        guard let discovery = discoveries[conversationID],
+              let state = reducers[conversationID]?.state,
+              let selected = state.model,
+              let model = availableModels[conversationID]?.first(where: {
+                  $0.provider == selected.provider && $0.id == selected.id
+              })
+        else { return nil }
+        let sources = Set(discovery.capabilities.attachments.sources ?? [.photoLibrary, .camera, .filePicker])
+        let gatewayMediaTypes = Set(
+            (discovery.capabilities.attachments.mediaTypes ?? discovery.limits.attachmentMediaTypes)
+                .map { $0.lowercased() }
+        )
+        let modelAttachment = model.attachments
+        let modelAllowsImages = model.input.contains(.image)
+            && (modelAttachment?.supported ?? true)
+            && (modelAttachment?.kinds.contains(.image) ?? true)
+        let modelMediaTypes = Set(modelAttachment?.mediaTypes.map { $0.lowercased() } ?? Array(gatewayMediaTypes))
+        let allowsImages = discovery.capabilities.attachments.images && modelAllowsImages
+        let allowsFiles = discovery.capabilities.attachments.files && model.input.contains(.file)
+        return .init(
+            allowsImages: allowsImages,
+            allowsFiles: allowsFiles,
+            allowsCamera: allowsImages && sources.contains(.camera),
+            allowsPhotoLibrary: allowsImages && sources.contains(.photoLibrary),
+            allowsFilePicker: (allowsImages || allowsFiles) && sources.contains(.filePicker),
+            mediaTypes: gatewayMediaTypes.intersection(modelMediaTypes),
+            maximumBytes: min(discovery.limits.attachmentMaxBytes, modelAttachment?.maxBytes ?? .max),
+            maximumCount: min(discovery.limits.attachmentsPerPrompt, modelAttachment?.maxCount ?? .max)
+        )
+    }
+
+    func supportsAttachmentMediaType(_ mediaType: String, conversationID: Conversation.ID) -> Bool {
+        guard let policy = attachmentPolicy(conversationID: conversationID) else { return false }
+        let normalized = mediaType.lowercased()
+        let kindAllowed = normalized.hasPrefix("image/") ? policy.allowsImages : policy.allowsFiles
+        return kindAllowed && policy.mediaTypes.contains(normalized)
+    }
+
+    func selectedModel(conversationID: Conversation.ID) -> PiGatewayWire.Model? {
         guard let state = reducers[conversationID]?.state,
               let selected = state.model,
               let model = availableModels[conversationID]?.first(where: {
                   $0.provider == selected.provider && $0.id == selected.id
               })
-        else { return false }
-        return (supportsAttachments(conversationID: conversationID, kind: .image) && model.input.contains(.image))
-            || (supportsAttachments(conversationID: conversationID, kind: .file) && model.input.contains(.file))
+        else { return nil }
+        return model
     }
 
     func attachmentMaximumBytes(conversationID: Conversation.ID) -> Int? {
@@ -509,7 +600,13 @@ final class PiSessionCoordinator {
     private func performMutation(_ action: PiConversationAction, conversationID: Conversation.ID) async throws {
         guard !pendingMutationStoreLoadFailed else { throw PiServiceError.invalidResponse }
         guard mutationsInFlight.insert(conversationID).inserted else { throw PiCoordinatorError.mutationInFlight }
-        defer { mutationsInFlight.remove(conversationID) }
+        pendingActions[conversationID] = action == .takeOver ? .takeover : .other
+        notify(conversationID)
+        defer {
+            mutationsInFlight.remove(conversationID)
+            pendingActions[conversationID] = nil
+            notify(conversationID)
+        }
         let context = try commandContext(conversationID)
         switch action {
         case .takeOver:

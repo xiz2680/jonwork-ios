@@ -78,9 +78,32 @@ enum PiGatewayWire {
     }
 
     struct Capabilities: Decodable, Equatable, Sendable {
+        enum AttachmentSource: String, Decodable, Equatable, Sendable {
+            case photoLibrary = "photo_library"
+            case camera
+            case filePicker = "file_picker"
+        }
+
         struct Attachments: Decodable, Equatable, Sendable {
             let images: Bool
             let files: Bool
+            let sources: [AttachmentSource]?
+            let mediaTypes: [String]?
+            let modelCompatibilityField: String?
+
+            init(
+                images: Bool,
+                files: Bool,
+                sources: [AttachmentSource]? = nil,
+                mediaTypes: [String]? = nil,
+                modelCompatibilityField: String? = nil
+            ) {
+                self.images = images
+                self.files = files
+                self.sources = sources
+                self.mediaTypes = mediaTypes
+                self.modelCompatibilityField = modelCompatibilityField
+            }
         }
 
         let repositories: Bool
@@ -140,6 +163,15 @@ enum PiGatewayWire {
     }
 
     struct Model: Decodable, Equatable, Sendable, Identifiable {
+        struct Attachments: Decodable, Equatable, Sendable {
+            enum Kind: String, Decodable, Equatable, Sendable { case image }
+            let supported: Bool
+            let kinds: [Kind]
+            let mediaTypes: [String]
+            let maxBytes: Int
+            let maxCount: Int
+        }
+
         let provider: String
         let id: String
         let name: String
@@ -148,10 +180,36 @@ enum PiGatewayWire {
         let thinkingLevels: [ThinkingLevel]
         let contextWindow: Int?
         let maxOutputTokens: Int?
+        let attachments: Attachments?
+
+        init(
+            provider: String,
+            id: String,
+            name: String,
+            reasoning: Bool,
+            input: [ModelInput],
+            thinkingLevels: [ThinkingLevel],
+            contextWindow: Int?,
+            maxOutputTokens: Int?,
+            attachments: Attachments? = nil
+        ) {
+            self.provider = provider
+            self.id = id
+            self.name = name
+            self.reasoning = reasoning
+            self.input = input
+            self.thinkingLevels = thinkingLevels
+            self.contextWindow = contextWindow
+            self.maxOutputTokens = maxOutputTokens
+            self.attachments = attachments
+        }
     }
 
     enum Runtime: String, Decodable, Equatable, Sendable { case stopped, starting, running, stopping }
     enum RunStatus: String, Decodable, Equatable, Sendable { case idle, queued, running, settling }
+    enum SessionLifecycle: String, Codable, Equatable, Sendable {
+        case idle, running, restoring, released, failed, stopped
+    }
 
     struct SessionSummary: Decodable, Equatable, Sendable, Identifiable {
         let sessionId: String
@@ -269,13 +327,15 @@ enum PiGatewayWire {
         let operationId: String?
         let afterEventId: String
         let responseStatus: Int
+        let deleted: Bool?
 
         init(
             sessionId: String,
             revision: Int,
             operationId: String?,
             afterEventId: String,
-            responseStatus: Int = 202
+            responseStatus: Int = 202,
+            deleted: Bool? = nil
         ) {
             status = .applied
             self.sessionId = sessionId
@@ -283,6 +343,7 @@ enum PiGatewayWire {
             self.operationId = operationId
             self.afterEventId = afterEventId
             self.responseStatus = responseStatus
+            self.deleted = deleted
         }
     }
 

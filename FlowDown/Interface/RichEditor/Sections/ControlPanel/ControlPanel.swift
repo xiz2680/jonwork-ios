@@ -90,8 +90,10 @@ class ControlPanel: EditorSectionView {
     override func layoutSubviews() {
         super.layoutSubviews()
 
-        let buttonWidth = ceil(bounds.width + buttonSpacing) / CGFloat(buttonViews.count) - buttonSpacing
-        for (idx, view) in buttonViews.enumerated() {
+        let visibleButtons = buttonViews.filter { !$0.isHidden }
+        guard !visibleButtons.isEmpty else { return }
+        let buttonWidth = ceil(bounds.width + buttonSpacing) / CGFloat(visibleButtons.count) - buttonSpacing
+        for (idx, view) in visibleButtons.enumerated() {
             view.frame = .init(
                 x: CGFloat(idx) * (buttonWidth + buttonSpacing),
                 y: 0,

@@ -29,6 +29,7 @@ extension RichEditorView {
     }
 
     func openCamera() {
+        guard jonworkAllowsImageAttachments, jonworkAllowsCamera else { return }
         guard let parent = parentViewController else { return }
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
             delegate?.onRichEditorError(String(localized: "Camera is not available, please grant camera permission"))
@@ -43,9 +44,10 @@ extension RichEditorView {
     }
 
     func openPhotoPicker() {
+        guard jonworkAllowsImageAttachments, jonworkAllowsPhotoLibrary else { return }
         guard let parent = parentViewController else { return }
         var config = PHPickerConfiguration()
-        config.selectionLimit = 4
+        config.selectionLimit = jonworkAttachmentMaximumCount
         config.filter = .images
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = self
@@ -53,8 +55,15 @@ extension RichEditorView {
     }
 
     func openFilePicker() {
+        guard jonworkAllowsFilePicker else { return }
         guard let parent = parentViewController else { return }
-        let supportedTypes: [UTType] = [.data, .image, .text, .plainText, .pdf, .audio]
+        let advertisedTypes: [UTType] = jonworkAttachmentMediaTypes.compactMap {
+            UTType.types(tag: $0, tagClass: .mimeType, conformingTo: nil).first
+        }
+        let supportedTypes: [UTType] = advertisedTypes.isEmpty
+            ? [.data, .text, .plainText, .pdf, .audio]
+            : advertisedTypes.filter { !$0.conforms(to: UTType.image) }
+        guard !supportedTypes.isEmpty else { return }
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: supportedTypes)
         picker.delegate = self
         picker.allowsMultipleSelection = true
@@ -62,6 +71,10 @@ extension RichEditorView {
     }
 
     func process(image: UIImage) {
+        guard jonworkAllowsImageAttachments,
+              jonworkAttachmentMediaTypes.isEmpty
+                || jonworkAttachmentMediaTypes.contains(where: { $0.hasPrefix("image/") })
+        else { return }
         guard let attachment = Object.Attachment(image: image, storage: storage) else {
             delegate?.onRichEditorError(NSLocalizedString("Failed to process image.", comment: ""))
             return
@@ -76,6 +89,15 @@ extension RichEditorView {
     }
 
     func process(file: URL) {
+        let selectedType = UTType(filenameExtension: file.pathExtension)
+        let mediaType = selectedType?.preferredMIMEType?.lowercased() ?? "application/octet-stream"
+        let isImage = selectedType?.conforms(to: .image) == true
+        guard (isImage ? jonworkAllowsImageAttachments : jonworkAllowsFileAttachments),
+              jonworkAttachmentMediaTypes.isEmpty || jonworkAttachmentMediaTypes.contains(mediaType)
+        else {
+            delegate?.onRichEditorError(String(localized: "This attachment type is not supported."))
+            return
+        }
         if let maximumBytes = jonworkAttachmentMaximumBytes {
             do {
                 let values = try file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])

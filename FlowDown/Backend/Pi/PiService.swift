@@ -105,12 +105,14 @@ protocol PiServiceProtocol: Sendable {
     func listRepositories() async throws -> [PiGatewayWire.Repository]
     func listModels() async throws -> [PiGatewayWire.Model]
     func listSessions(repositoryID: String?) async throws -> [PiGatewayWire.SessionSummary]
+    func searchSessions(repositoryID: String?, query: String, state: PiGatewayWire.SessionLifecycle?, limit: Int) async throws -> [PiGatewayWire.SessionSummary]
     func createSession(repositoryID: String, name: String?, clientID: String, idempotencyKey: String) async throws -> PiGatewayWire.Snapshot
     func restoreSession(sessionID: String, clientID: String, context: PiMutationContext) async throws -> PiGatewayWire.Snapshot
     func snapshot(sessionID: String) async throws -> PiGatewayWire.Snapshot
     func events(sessionID: String, clientID: String, afterEventID: String) -> AsyncThrowingStream<PiGatewayWire.Event, Error>
     func mutate(_ action: PiConversationAction, sessionID: String, clientID: String, context: PiMutationContext) async throws -> PiGatewayWire.MutationReceipt
     func mutationReceipt(sessionID: String, idempotencyKey: String, clientID: String) async throws -> PiGatewayWire.MutationReceiptLookup
+    func deleteSession(sessionID: String, clientID: String, context: PiMutationContext) async throws -> PiGatewayWire.MutationReceipt
     func uploadAttachment(
         data: Data,
         fileName: String,
@@ -126,6 +128,7 @@ extension PiServiceProtocol {
     func listRepositories() async throws -> [PiGatewayWire.Repository] { throw PiServiceError.invalidResponse }
     func listModels() async throws -> [PiGatewayWire.Model] { throw PiServiceError.invalidResponse }
     func listSessions(repositoryID _: String?) async throws -> [PiGatewayWire.SessionSummary] { throw PiServiceError.invalidResponse }
+    func searchSessions(repositoryID: String?, query _: String, state _: PiGatewayWire.SessionLifecycle?, limit _: Int) async throws -> [PiGatewayWire.SessionSummary] { try await listSessions(repositoryID: repositoryID) }
     func createSession(repositoryID _: String, name _: String?, clientID _: String, idempotencyKey _: String) async throws -> PiGatewayWire.Snapshot { throw PiServiceError.invalidResponse }
     func restoreSession(sessionID _: String, clientID _: String, context _: PiMutationContext) async throws -> PiGatewayWire.Snapshot { throw PiServiceError.invalidResponse }
     func snapshot(sessionID _: String) async throws -> PiGatewayWire.Snapshot { throw PiServiceError.invalidResponse }
@@ -134,6 +137,7 @@ extension PiServiceProtocol {
     }
     func mutate(_: PiConversationAction, sessionID _: String, clientID _: String, context _: PiMutationContext) async throws -> PiGatewayWire.MutationReceipt { throw PiServiceError.invalidResponse }
     func mutationReceipt(sessionID _: String, idempotencyKey _: String, clientID _: String) async throws -> PiGatewayWire.MutationReceiptLookup { throw PiServiceError.invalidResponse }
+    func deleteSession(sessionID _: String, clientID _: String, context _: PiMutationContext) async throws -> PiGatewayWire.MutationReceipt { throw PiServiceError.invalidResponse }
     func uploadAttachment(data _: Data, fileName _: String, mediaType _: String, repositoryID _: String, idempotencyKey _: String) async throws -> PiGatewayWire.Attachment { throw PiServiceError.invalidResponse }
 }
 
@@ -181,6 +185,26 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
     func listSessions(repositoryID: String?) async throws -> [PiGatewayWire.SessionSummary] {
         let query = repositoryID?.piNilIfEmpty.map { [URLQueryItem(name: "repositoryId", value: $0)] } ?? []
         let response: ItemResponse<PiGatewayWire.SessionSummary> = try await get("v1/sessions", queryItems: query)
+        return response.items
+    }
+
+    func searchSessions(
+        repositoryID: String?,
+        query: String,
+        state: PiGatewayWire.SessionLifecycle?,
+        limit: Int
+    ) async throws -> [PiGatewayWire.SessionSummary] {
+        guard (1 ... 100).contains(limit) else { throw PiServiceError.invalidResponse }
+        var queryItems = [URLQueryItem(name: "query", value: query)]
+        if let repositoryID = repositoryID?.piNilIfEmpty {
+            queryItems.append(.init(name: "repositoryId", value: repositoryID))
+        }
+        if let state { queryItems.append(.init(name: "state", value: state.rawValue)) }
+        queryItems.append(.init(name: "limit", value: String(limit)))
+        let response: ItemResponse<PiGatewayWire.SessionSummary> = try await get(
+            "v1/sessions",
+            queryItems: queryItems
+        )
         return response.items
     }
 
@@ -340,6 +364,24 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
                 "X-Client-Id": clientID,
             ]
         )
+    }
+
+    func deleteSession(
+        sessionID: String,
+        clientID: String,
+        context: PiMutationContext
+    ) async throws -> PiGatewayWire.MutationReceipt {
+        let receipt: PiGatewayWire.MutationReceipt = try await mutationRequest(
+            method: "DELETE",
+            path: "v1/sessions/\(try Self.segment(sessionID))",
+            context: context,
+            body: JSONEncoder().encode(ClientRequest(clientId: clientID))
+        )
+        guard receipt.sessionId == sessionID,
+              receipt.responseStatus == 200,
+              receipt.deleted == true
+        else { throw PiServiceError.invalidResponse }
+        return receipt
     }
 
     func uploadAttachment(
@@ -663,6 +705,22 @@ final class PiRefreshingService: PiServiceProtocol, @unchecked Sendable {
         try await retryOnce { try await $0.listSessions(repositoryID: repositoryID) }
     }
 
+    func searchSessions(
+        repositoryID: String?,
+        query: String,
+        state: PiGatewayWire.SessionLifecycle?,
+        limit: Int
+    ) async throws -> [PiGatewayWire.SessionSummary] {
+        try await retryOnce {
+            try await $0.searchSessions(
+                repositoryID: repositoryID,
+                query: query,
+                state: state,
+                limit: limit
+            )
+        }
+    }
+
     func createSession(
         repositoryID: String,
         name: String?,
@@ -755,6 +813,16 @@ final class PiRefreshingService: PiServiceProtocol, @unchecked Sendable {
                 idempotencyKey: idempotencyKey,
                 clientID: clientID
             )
+        }
+    }
+
+    func deleteSession(
+        sessionID: String,
+        clientID: String,
+        context: PiMutationContext
+    ) async throws -> PiGatewayWire.MutationReceipt {
+        try await retryOnce {
+            try await $0.deleteSession(sessionID: sessionID, clientID: clientID, context: context)
         }
     }
 

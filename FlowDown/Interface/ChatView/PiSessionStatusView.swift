@@ -94,6 +94,12 @@ final class PiSessionStatusView: UIVisualEffectView {
         switch viewState.connection {
         case .connecting:
             showConnecting()
+        case .restoring:
+            actionButton.isHidden = true
+            stopButton.isHidden = true
+            symbolView.image = UIImage(systemName: "clock.arrow.circlepath")
+            symbolView.tintColor = .secondaryLabel
+            statusLabel.text = String(localized: "Jonwork · Restoring conversation")
         case .offline:
             symbolView.image = UIImage(systemName: "wifi.slash")
             symbolView.tintColor = .systemOrange
@@ -102,6 +108,10 @@ final class PiSessionStatusView: UIVisualEffectView {
             symbolView.image = UIImage(systemName: "terminal")
             symbolView.tintColor = .secondaryLabel
             statusLabel.text = String(localized: "Jonwork · Available on desktop")
+        case .connected where viewState.pendingAction == .takeover:
+            symbolView.image = UIImage(systemName: "hourglass")
+            symbolView.tintColor = .systemIndigo
+            statusLabel.text = String(localized: "Jonwork · Taking control…")
         case .connected where state.role == .viewer:
             symbolView.image = UIImage(systemName: "eye")
             symbolView.tintColor = .systemIndigo

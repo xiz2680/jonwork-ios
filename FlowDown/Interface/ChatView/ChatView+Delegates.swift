@@ -235,7 +235,11 @@ extension ChatView: RichEditorView.Delegate {
     return try object.attachments.map { attachment in
       let kind: PiAttachmentUpload.Kind = attachment.type == .image ? .image : .file
       guard let conversationIdentifier,
-            PiSessionCoordinator.shared.supportsAttachments(conversationID: conversationIdentifier, kind: kind)
+            PiSessionCoordinator.shared.supportsAttachments(conversationID: conversationIdentifier, kind: kind),
+            PiSessionCoordinator.shared.supportsAttachmentMediaType(
+              mediaType(for: attachment),
+              conversationID: conversationIdentifier
+            )
       else { throw PiCoordinatorError.capabilityUnavailable }
       let fileURL = storageURL?.appendingPathComponent(attachment.storageSuffix)
       if attachment.type == .image, !attachment.imageRepresentation.isEmpty {

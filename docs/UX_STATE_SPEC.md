@@ -246,13 +246,11 @@ When more than one condition applies, the presentation priority is:
 
 The following first-release journeys remain blocked until they have implementation and independent device evidence:
 
-- Rename must update the authoritative Jonwork conversation name rather than only local presentation metadata.
-- Conversation search must define and use an authoritative Jonwork indexing source; local transient timeline rows are not a durable search index.
-- Model, thinking level, and context usage need Jonwork-native controls before the legacy FlowDown selectors can be replaced. Pi-bound conversations currently hide the legacy selectors to prevent commands reaching the wrong backend.
-- Image and file attachment controls remain hidden for Pi-bound conversations until the gateway accepts those payloads and enforces size, type, and timeout limits.
-- Released conversations need a verified return-to-conversations navigation action on both compact iPhone and Catalyst layouts.
-- The current connection model does not expose a complete recovering, retry, takeover-pending, or version-blocked presentation contract.
+- Session deletion and debounced server search are implemented against the versioned gateway contract but still need independent device evidence.
+- Context-usage presentation still needs product acceptance evidence; model and thinking controls are now sourced from the gateway model registry.
+- Attachment entry points are gated before presentation by gateway capability, media type/limit, and selected-model input; file controls remain absent while discovery advertises image-only support.
+- Restoring, takeover-pending, and version-blocked states are implemented but still require independent device and accessibility evidence.
 - iPhone still uses a custom drawer-style container rather than a native navigation stack.
-- The production Jonwork gateway must expose a compatible version and capability contract for authoritative conversations, ownership, reconnect, and release; the client must not silently fall back to stateless chat.
+- The client continues to fail closed when the gateway version or required capabilities are incompatible; it never falls back to stateless chat.
 
 Release packaging, signing, archive submission, and store-distribution work are outside this UX implementation phase.

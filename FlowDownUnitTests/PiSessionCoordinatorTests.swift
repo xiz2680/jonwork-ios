@@ -145,6 +145,71 @@ struct PiSessionCoordinatorTests {
 
     @Test
     @MainActor
+    func `remote session identity is unique across local conversations`() {
+        let service = PiServiceSpy(snapshots: [], streams: [])
+        let (coordinator, defaults) = makeCoordinator(service: service) { _, _ in }
+        defer {
+            coordinator.unbindAll()
+            defaults.removePersistentDomain(forName: defaultsSuite)
+        }
+
+        let baseURL = URL(string: "https://pi.example.test")!
+        coordinator.bind(
+            conversationID: "old-local",
+            sessionID: "remote-session",
+            repository: "/repo",
+            clientID: "client-a",
+            baseURL: baseURL
+        )
+        coordinator.bind(
+            conversationID: "current-local",
+            sessionID: "remote-session",
+            repository: "/repo",
+            clientID: "client-b",
+            baseURL: baseURL
+        )
+
+        #expect(coordinator.binding(for: "old-local") == nil)
+        #expect(coordinator.conversationID(
+            sessionID: "remote-session",
+            repository: "/repo",
+            baseURL: baseURL
+        ) == "current-local")
+    }
+
+    @Test
+    @MainActor
+    func `attachment policy intersects gateway model and media type capabilities`() async throws {
+        let stream = ControlledEventStream()
+        let model = attachmentModel()
+        let service = PiServiceSpy(
+            snapshots: [snapshot(
+                title: "Attachments",
+                message: "history",
+                model: .init(provider: model.provider, id: model.id)
+            )],
+            streams: [stream.stream],
+            models: [model]
+        )
+        let (coordinator, defaults) = makeCoordinator(service: service) { _, _ in }
+        defer {
+            coordinator.unbind(conversationID: "conversation")
+            defaults.removePersistentDomain(forName: defaultsSuite)
+        }
+
+        bind(coordinator, conversationID: "conversation", sessionID: "session")
+        #expect(coordinator.viewState(for: "conversation")?.connection == .restoring)
+        try await waitUntil { coordinator.viewState(for: "conversation")?.connection == .connected }
+
+        let policy = try #require(coordinator.attachmentPolicy(conversationID: "conversation"))
+        #expect(policy.allowsImages)
+        #expect(!policy.allowsFiles)
+        #expect(coordinator.supportsAttachmentMediaType("image/png", conversationID: "conversation"))
+        #expect(!coordinator.supportsAttachmentMediaType("application/octet-stream", conversationID: "conversation"))
+    }
+
+    @Test
+    @MainActor
     func `viewer cannot send or abort through coordinator`() async throws {
         let stream = ControlledEventStream()
         let service = PiServiceSpy(

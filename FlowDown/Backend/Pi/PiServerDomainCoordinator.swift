@@ -290,6 +290,21 @@ final class PiServerDomainCoordinator {
         return presentation
     }
 
+    func searchSessions(query: String, limit: Int = 100) async throws -> [PiSessionPresentation] {
+        let generation = authenticationGeneration
+        guard let service else { throw PiServiceError.invalidResponse }
+        let sessions = try await service.searchSessions(
+            repositoryID: presentation.selectedRepositoryID,
+            query: query,
+            state: nil,
+            limit: limit
+        )
+        try validateAuthentication(generation)
+        return sessions.map {
+            .init(id: $0.sessionId, name: $0.name, messageCount: $0.messageCount, isRunning: $0.runtime == .running)
+        }
+    }
+
     func createOrRestoreSession(clientID: String, resumeSessionID: String?) async throws -> PiCreatedSession {
         let generation = authenticationGeneration
         guard !pendingCreationStoreLoadFailed else { throw PiServiceError.invalidResponse }
@@ -401,6 +416,35 @@ final class PiServerDomainCoordinator {
             pendingCreation = nil
             throw error
         }
+    }
+
+    @discardableResult
+    func deleteSession(sessionID: String, clientID: String) async throws -> PiServerPresentation {
+        let generation = authenticationGeneration
+        guard let service else { throw PiServiceError.invalidResponse }
+        var snapshot = try await service.snapshot(sessionID: sessionID)
+        try validateAuthentication(generation)
+        if snapshot.controller.clientId != clientID {
+            _ = try await service.mutate(
+                .takeOver,
+                sessionID: sessionID,
+                clientID: clientID,
+                context: .init(idempotencyKey: UUID().uuidString, revision: snapshot.revision)
+            )
+            try validateAuthentication(generation)
+            snapshot = try await service.snapshot(sessionID: sessionID)
+            try validateAuthentication(generation)
+            guard snapshot.controller.clientId == clientID else { throw PiServiceError.accessDenied }
+        }
+        let receipt = try await service.deleteSession(
+            sessionID: sessionID,
+            clientID: clientID,
+            context: .init(idempotencyKey: UUID().uuidString, revision: snapshot.revision)
+        )
+        try validateAuthentication(generation)
+        guard receipt.deleted == true else { throw PiServiceError.invalidResponse }
+        presentation.sessions.removeAll { $0.id == sessionID }
+        return presentation
     }
 
     func signOut() async throws {

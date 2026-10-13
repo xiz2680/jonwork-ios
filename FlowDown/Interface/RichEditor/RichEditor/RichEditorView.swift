@@ -114,6 +114,13 @@ class RichEditorView: EditorSectionView {
     var objectTransactionInProgress = false
     private var isJonworkConversation = false
     var jonworkAttachmentMaximumBytes: Int?
+    var jonworkAllowsImageAttachments = true
+    var jonworkAllowsFileAttachments = true
+    var jonworkAllowsCamera = true
+    var jonworkAllowsPhotoLibrary = true
+    var jonworkAllowsFilePicker = true
+    var jonworkAttachmentMaximumCount = 4
+    var jonworkAttachmentMediaTypes: Set<String> = []
     var heightContraints: NSLayoutConstraint = .init()
 
     var handlerColor: UIColor = .init {
@@ -303,18 +310,43 @@ class RichEditorView: EditorSectionView {
 
     func setJonworkConversation(
         _ enabled: Bool,
-        attachmentsEnabled: Bool = false,
-        attachmentMaximumBytes: Int? = nil
+        allowsImageAttachments: Bool = false,
+        allowsFileAttachments: Bool = false,
+        allowsCamera: Bool = false,
+        allowsPhotoLibrary: Bool = false,
+        allowsFilePicker: Bool = false,
+        attachmentMaximumBytes: Int? = nil,
+        attachmentMaximumCount: Int = 0,
+        attachmentMediaTypes: Set<String> = []
     ) {
+        let attachmentsEnabled = allowsImageAttachments || allowsFileAttachments
         let configurationChanged = isJonworkConversation != enabled
             || inputEditor.bossButton.isHidden == attachmentsEnabled
             || jonworkAttachmentMaximumBytes != attachmentMaximumBytes
+            || jonworkAllowsImageAttachments != allowsImageAttachments
+            || jonworkAllowsFileAttachments != allowsFileAttachments
+            || jonworkAllowsCamera != allowsCamera
+            || jonworkAllowsPhotoLibrary != allowsPhotoLibrary
+            || jonworkAllowsFilePicker != allowsFilePicker
+            || jonworkAttachmentMaximumCount != attachmentMaximumCount
+            || jonworkAttachmentMediaTypes != attachmentMediaTypes
         guard configurationChanged else { return }
         isJonworkConversation = enabled
         jonworkAttachmentMaximumBytes = enabled ? attachmentMaximumBytes : nil
+        jonworkAllowsImageAttachments = !enabled || allowsImageAttachments
+        jonworkAllowsFileAttachments = !enabled || allowsFileAttachments
+        jonworkAllowsCamera = !enabled || allowsCamera
+        jonworkAllowsPhotoLibrary = !enabled || allowsPhotoLibrary
+        jonworkAllowsFilePicker = !enabled || allowsFilePicker
+        jonworkAttachmentMaximumCount = enabled ? attachmentMaximumCount : 4
+        jonworkAttachmentMediaTypes = enabled ? attachmentMediaTypes : []
         controlPanel.close()
         inputEditor.bossButton.isHidden = enabled && !attachmentsEnabled
         inputEditor.moreButton.isHidden = enabled
+        controlPanel.cameraButton.isHidden = enabled && !allowsCamera
+        controlPanel.photoButton.isHidden = enabled && !allowsPhotoLibrary
+        controlPanel.fileButton.isHidden = enabled && !allowsFilePicker
+        controlPanel.webButton.isHidden = enabled
         if enabled {
             quickSettingBar.browsingToggle.isOn = false
             quickSettingBar.toolsToggle.isOn = false

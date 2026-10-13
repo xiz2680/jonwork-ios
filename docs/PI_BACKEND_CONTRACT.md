@@ -18,30 +18,26 @@ Pi gateway / Pi agent runtime
 
 ## Backend Reality and Delivery Decision
 
-The repository audit on 2026-10-12 found two incompatible server surfaces:
-
-1. `jonwork-server` contract `1.2.0` provides production iOS PKCE/device authentication, model discovery, and OpenAI-compatible chat SSE. It does not expose Pi session CRUD, authoritative state, controller/viewer ownership, tool lifecycle events, takeover, or release.
-2. `pi-mobile` provides the session HTTP/SSE surface below, but uses optional static-token authentication, has no capability/version document, and currently pins `pi-coding-agent ~0.53.0` while `jonwork-pi` is `1.1.0` with protocol version 8.
-
-Therefore the app must not couple UIKit to either wire format. `PiServiceProtocol` is the replaceable boundary, `PiSessionReducer` owns deterministic state transitions, and FlowDown views consume presentation models only. The current implementation targets `pi-mobile` for the agent-session vertical slice. Production distribution remains blocked until a gateway combines Jonwork device authentication with a versioned current-Pi session contract.
+The versioned Jonwork gateway exposes the `pi-gateway/1.0` contract, OAuth 2 authorization-code authentication with PKCE, authoritative snapshots, replayable SSE, idempotent mutations, controller ownership, and capability/limit discovery. UIKit remains independent of the wire format: `PiServiceProtocol` is the replaceable transport boundary, `PiEventAdapter` validates ordered events, `PiSessionReducer` owns deterministic state transitions, and FlowDown views consume presentation models only.
 
 The client must fail closed when a required capability is absent. It must never silently downgrade a requested Pi agent session to stateless chat completions.
 
-## Development Gateway Endpoints
+## Gateway Endpoints
 
-The first adapter targets the existing gateway surface:
+- `GET /.well-known/pi-gateway`
+- `GET /v1/repositories`
+- `GET /v1/models`
+- `GET` and `POST /v1/sessions`
+- `GET` and `PATCH /v1/sessions/{sessionId}`
+- `POST /v1/sessions/{sessionId}/restore`
+- `GET /v1/sessions/{sessionId}/events`
+- `POST /v1/sessions/{sessionId}/commands`
+- `POST /v1/sessions/{sessionId}/takeover`
+- `POST /v1/sessions/{sessionId}/release`
+- `GET /v1/sessions/{sessionId}/mutation-receipt`
+- `POST /v1/attachments`
 
-- `GET /health`
-- `GET /api/repos`
-- `GET /api/models`
-- `GET /api/sessions`
-- `GET /api/active-sessions`
-- create or resume session endpoint under `/api/sessions`
-- session state and SSE event stream
-- session command endpoint
-- takeover and release endpoints
-
-The concrete paths and payload schemas are checked against `/Users/a/xz-workspace/pi-mobile/src/types.ts` and `/Users/a/xz-workspace/pi-mobile/src/server.ts`. Swift request and response fixtures are versioned with adapter tests.
+Mutation requests use `Idempotency-Key` and revision fencing. Swift fixtures freeze discovery, snapshot, event, receipt, and error payloads. Deletion uses `DELETE /v1/sessions/{sessionId}` with `{ "clientId": "…" }` and requires an applied receipt with `deleted: true`; search uses the versioned `query`, `state`, and `limit` parameters on the session list.
 
 ## Command Mapping
 
@@ -53,8 +49,7 @@ The concrete paths and payload schemas are checked against `/Users/a/xz-workspac
 | Stop current run | `abort` |
 | Select model | `set_model` |
 | Set reasoning depth | `set_thinking_level` |
-| Configure queue behavior | `set_steering_mode`, `set_follow_up_mode` |
-| Rename session | `set_session_name` |
+| Rename session | `PATCH /v1/sessions/{sessionId}` |
 | Become controller | takeover request |
 | Return control to CLI | release request |
 
@@ -62,31 +57,28 @@ The concrete paths and payload schemas are checked against `/Users/a/xz-workspac
 
 | Pi event | Product presentation |
 |---|---|
-| `init` | Replace session snapshot, role, and controller state |
-| `state_patch` | Update model, reasoning, name, usage, and modes |
-| `controller_changed` | Update composer availability and ownership banner |
-| `released` | Close live stream and show safe CLI-resume state |
-| `turn_start` / `agent_start` | Begin active response state |
-| `message_start` | Allocate user or assistant row |
-| `message_update` text delta | Incrementally update assistant Markdown source |
-| `message_update` thinking/reasoning delta | Incrementally update reasoning view |
-| `message_end` | Final render, stop reason, and error state |
-| `tool_execution_start` | Create pending tool card |
-| `tool_execution_update` | Update tool progress without replacing the card |
-| `tool_execution_end` | Resolve tool card as success or error |
-| `agent_end` | End model activity; retain retry state when applicable |
-| `agent_settled` | Mark composer ready and finalize run state |
-| retry and compaction events | Show compact non-blocking operational status |
+| authoritative snapshot | Replace history, configuration, role, and controller state |
+| `operation.accepted` / `operation.settled` | Track one idempotent operation through completion or retryable failure |
+| `user.message` | Upsert the stable user row |
+| `turn.started` / `turn.completed` | Track the active run without creating presentation rows |
+| `assistant.message.started` / `assistant.message.completed` | Allocate and finalize the stable assistant row |
+| `assistant.text.delta` | Incrementally update assistant Markdown source |
+| `assistant.reasoning.delta` | Incrementally update the existing reasoning view |
+| `tool.started` / `tool.updated` / `tool.completed` | Reuse and update one stable tool card |
+| `abort.requested` | Preserve history while the active operation stops |
+| `gateway.error` | Present typed failure and retry availability |
+| `controller.changed` | Update composer availability and ownership banner |
+| `session.released` | Close live mutation controls and return to the server session list |
 
 ## Session Safety
 
 - One Pi runtime has at most one controller.
-- Viewer mode disables all mutation controls, including abort, and continues live rendering. The current development gateway incorrectly permits viewer abort; the client does not expose it and the production gateway must reject it.
+- Viewer mode disables all mutation controls, including abort, and continues live rendering.
 - Takeover is unavailable while streaming if the gateway rejects it.
 - Abort stops the run and preserves session history.
 - Release aborts if necessary, disposes the web runtime, closes the stream, and preserves the JSONL session for native CLI resume.
 - Reconnect first obtains authoritative state, then resumes streaming. UI-local message state must never be treated as authoritative history.
-- The current gateway does not provide SSE event IDs or replay cursors. Reconnect replaces the entire snapshot and only then consumes new events; no exactly-once claim is made across a disconnected interval.
+- Reconnect replaces state from an authoritative snapshot, then resumes after the snapshot event ID. An expired cursor triggers another authoritative replacement.
 - Duplicate events are reduced idempotently by stable message and tool-call identity whenever the gateway supplies one.
 - The client does not automatically resend a prompt after an ambiguous network failure.
 
@@ -102,15 +94,12 @@ The concrete paths and payload schemas are checked against `/Users/a/xz-workspac
 
 ## Known Contract Gaps
 
-- The production server has no Pi session service.
-- The development gateway has no API version or capability discovery.
-- Development SSE has no event ID, replay cursor, or resumable stream.
-- Development authentication is not suitable for App Store production and its browser UI permits tokens in query parameters.
-- Development prompt commands are text-only; image/file attachment parity is not yet available.
-- `agent_settled` and current Pi 1.1 events are not guaranteed by the gateway's pinned 0.53 dependency.
+- Session search and deletion require the gateway's advertised optional capabilities; older compatible gateways keep those controls unavailable.
+- Restoring and takeover-pending are client request phases, not durable gateway snapshot fields.
+- Attachment support is limited by the intersection of discovery flags, discovery media types/limits, and the selected model's `input` values.
 
 These are release blockers, not client-side fallback opportunities.
 
 ## Compatibility
 
-The production gateway must expose an API version and capability document before App Store release. Unsupported major versions fail with a clear upgrade message. Optional capabilities are feature-gated; they do not silently degrade core session safety.
+Unsupported major versions fail closed with an update action. Optional capabilities are feature-gated; they do not silently degrade core session safety.

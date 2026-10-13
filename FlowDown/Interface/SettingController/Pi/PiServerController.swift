@@ -4,7 +4,7 @@ import Storage
 import UIKit
 
 extension SettingController.SettingContent {
-    final class PiServerController: UITableViewController {
+    final class PiServerController: UITableViewController, UISearchResultsUpdating {
         private enum Section: Int, CaseIterable {
             case connection
             case repositories
@@ -17,11 +17,15 @@ extension SettingController.SettingContent {
         private let clientID = UUID().uuidString
         private var repositories: [PiRepositoryPresentation] = []
         private var sessions: [PiSessionPresentation] = []
+        private var allSessions: [PiSessionPresentation] = []
         private var selectedRepository: String?
         private var isConnected = false
         private var isLoading = false
         private var isSigningOut = false
+        private var isRestoringSession = false
+        private var compatibilityError: String?
         private var connectTask: Task<Void, Never>?
+        private var searchTask: Task<Void, Never>?
         private(set) var hasSavedToken = false
         private lazy var oauthClient = PiOAuthClient { [weak self] in
             self?.view.window ?? ASPresentationAnchor()
@@ -48,6 +52,12 @@ extension SettingController.SettingContent {
             super.viewDidLoad()
             tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
             navigationItem.largeTitleDisplayMode = .never
+            let searchController = UISearchController(searchResultsController: nil)
+            searchController.searchResultsUpdater = self
+            searchController.obscuresBackgroundDuringPresentation = false
+            searchController.searchBar.placeholder = String(localized: "Search Conversations")
+            navigationItem.searchController = searchController
+            navigationItem.hidesSearchBarWhenScrolling = false
             do {
                 if gatewayConfiguration.accepts(try domainCoordinator.savedProfile()) {
                     hasSavedToken = try domainCoordinator.hasSavedCredentials()
@@ -67,6 +77,8 @@ extension SettingController.SettingContent {
             if isMovingFromParent || navigationController?.isBeingDismissed == true {
                 connectTask?.cancel()
                 connectTask = nil
+                searchTask?.cancel()
+                searchTask = nil
             }
         }
 
@@ -90,7 +102,33 @@ extension SettingController.SettingContent {
 
         override func tableView(_: UITableView, titleForFooterInSection section: Int) -> String? {
             guard Section(rawValue: section) == .connection else { return nil }
-            return String(localized: "Sign in securely to access your workspace.")
+            return compatibilityError ?? String(localized: "Sign in securely to access your workspace.")
+        }
+
+        func updateSearchResults(for searchController: UISearchController) {
+            let query = searchController.searchBar.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            searchTask?.cancel()
+            sessions = query.isEmpty ? allSessions : allSessions.filter {
+                ($0.name ?? "").localizedCaseInsensitiveContains(query)
+                    || $0.id.localizedCaseInsensitiveContains(query)
+            }
+            tableView.reloadSections(IndexSet(integer: Section.sessions.rawValue), with: .none)
+            guard !query.isEmpty, isConnected else { return }
+            searchTask = Task { @MainActor [weak self] in
+                do {
+                    try await Task.sleep(for: .milliseconds(250))
+                    guard let self,
+                          navigationItem.searchController?.searchBar.text?
+                              .trimmingCharacters(in: .whitespacesAndNewlines) == query
+                    else { return }
+                    sessions = try await domainCoordinator.searchSessions(query: query)
+                    tableView.reloadSections(IndexSet(integer: Section.sessions.rawValue), with: .none)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    return
+                }
+            }
         }
 
         override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -104,7 +142,9 @@ extension SettingController.SettingContent {
             switch Section(rawValue: indexPath.section) {
             case .connection:
                 if indexPath.row == 0 {
-                    configuration.text = isLoading ? String(localized: "Signing In…") : String(localized: "Sign In")
+                    configuration.text = compatibilityError == nil
+                        ? (isLoading ? String(localized: "Signing In…") : String(localized: "Sign In"))
+                        : String(localized: "Version Incompatible")
                     configuration.textProperties.color = isLoading || isSigningOut ? .secondaryLabel : .tintColor
                     configuration.image = UIImage(systemName: isLoading ? "arrow.triangle.2.circlepath" : "network")
                     cell.selectionStyle = isLoading || isSigningOut ? .none : .default
@@ -173,6 +213,71 @@ extension SettingController.SettingContent {
             }
         }
 
+        override func tableView(
+            _: UITableView,
+            trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+        ) -> UISwipeActionsConfiguration? {
+            guard Section(rawValue: indexPath.section) == .sessions,
+                  sessions.indices.contains(indexPath.row),
+                  !isLoading,
+                  !isSigningOut
+            else { return nil }
+            let session = sessions[indexPath.row]
+            let action = UIContextualAction(style: .destructive, title: String(localized: "Delete")) {
+                [weak self] _, _, completion in
+                self?.confirmDelete(session: session, completion: completion)
+            }
+            action.image = UIImage(systemName: "trash")
+            let configuration = UISwipeActionsConfiguration(actions: [action])
+            configuration.performsFirstActionWithFullSwipe = false
+            return configuration
+        }
+
+        private func confirmDelete(
+            session: PiSessionPresentation,
+            completion: @escaping (Bool) -> Void
+        ) {
+            let alert = UIAlertController(
+                title: String(localized: "Delete Conversation?"),
+                message: String(localized: "This permanently deletes the conversation from the server."),
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel) { _ in
+                completion(false)
+            })
+            alert.addAction(UIAlertAction(title: String(localized: "Delete"), style: .destructive) {
+                [weak self] _ in
+                guard let self else {
+                    completion(false)
+                    return
+                }
+                Task { @MainActor in
+                    do {
+                        self.setLoading(true)
+                        defer { self.setLoading(false) }
+                        self.apply(try await self.domainCoordinator.deleteSession(
+                            sessionID: session.id,
+                            clientID: self.clientID
+                        ))
+                        if let selectedRepository = self.selectedRepository,
+                           let localID = PiSessionCoordinator.shared.conversationID(
+                               sessionID: session.id,
+                               repository: selectedRepository,
+                               baseURL: self.gatewayConfiguration.baseURL
+                           )
+                        {
+                            ConversationManager.shared.deleteConversation(identifier: localID)
+                        }
+                        completion(true)
+                    } catch {
+                        self.presentError(error)
+                        completion(false)
+                    }
+                }
+            })
+            present(alert, animated: true)
+        }
+
         private func connect() async {
             guard !isLoading, !isSigningOut else { return }
             do {
@@ -188,6 +293,7 @@ extension SettingController.SettingContent {
                 isConnected = false
                 repositories = []
                 sessions = []
+                allSessions = []
                 selectedRepository = nil
                 tableView.reloadData()
                 presentError(error)
@@ -227,6 +333,7 @@ extension SettingController.SettingContent {
                 isConnected = false
                 repositories = []
                 sessions = []
+                allSessions = []
                 selectedRepository = nil
                 hasSavedToken = (try? domainCoordinator.hasSavedCredentials()) ?? false
                 tableView.reloadData()
@@ -251,10 +358,11 @@ extension SettingController.SettingContent {
 
         private func apply(_ presentation: PiServerPresentation) {
             repositories = presentation.repositories
-            sessions = presentation.sessions
+            allSessions = presentation.sessions
             selectedRepository = presentation.selectedRepositoryID
             isConnected = presentation.isConnected
-            tableView.reloadData()
+            compatibilityError = nil
+            updateSearchResults(for: navigationItem.searchController ?? UISearchController())
         }
 
         private func reloadSessions() async {
@@ -264,28 +372,49 @@ extension SettingController.SettingContent {
         private func openSession(resumeSessionID: String?) async {
             guard selectedRepository != nil, !isSigningOut else { return }
             setLoading(true)
-            defer { setLoading(false) }
+            isRestoringSession = resumeSessionID != nil
+            navigationItem.prompt = isRestoringSession ? String(localized: "Restoring conversation…") : nil
+            defer {
+                isRestoringSession = false
+                navigationItem.prompt = nil
+                setLoading(false)
+            }
             do {
                 let createdSession = try await domainCoordinator.createOrRestoreSession(
                     clientID: clientID,
                     resumeSessionID: resumeSessionID
                 )
                 let summary = sessions.first { $0.id == resumeSessionID }
-                let conversation = ConversationManager.shared.createNewConversation({ conversation in
-                    conversation.update(
-                        \.title,
-                        to: summary?.name?.nilIfBlank
-                            ?? String(localized: "New Conversation")
-                    )
-                    conversation.update(\.modelId, to: "pi:\(createdSession.sessionID)")
-                    conversation.update(\.shouldAutoRename, to: false)
-                })
-                let localSession = ConversationSessionManager.shared.session(for: conversation.id)
-                for message in localSession.messages {
-                    localSession.discard(messageIdentifier: message.objectId)
+                let existingID = PiSessionCoordinator.shared.conversationID(
+                    sessionID: createdSession.sessionID,
+                    repository: createdSession.repository,
+                    baseURL: createdSession.baseURL
+                )
+                let conversation: Conversation
+                if let existingID,
+                   let existing = ConversationManager.shared.conversation(identifier: existingID)
+                {
+                    conversation = existing
+                    ConversationManager.shared.editConversation(identifier: existingID) {
+                        if let name = summary?.name?.nilIfBlank { $0.update(\.title, to: name) }
+                    }
+                } else {
+                    conversation = ConversationManager.shared.createNewConversation { conversation in
+                        conversation.update(
+                            \.title,
+                            to: summary?.name?.nilIfBlank
+                                ?? String(localized: "New Conversation")
+                        )
+                        conversation.update(\.modelId, to: "pi:\(createdSession.sessionID)")
+                        conversation.update(\.shouldAutoRename, to: false)
+                    }
+                    let localSession = ConversationSessionManager.shared.session(for: conversation.id)
+                    for message in localSession.messages {
+                        localSession.discard(messageIdentifier: message.objectId)
+                    }
+                    localSession.save()
+                    localSession.notifyMessagesDidChange()
                 }
-                localSession.save()
-                localSession.notifyMessagesDidChange()
                 createdSession.bind(conversationID: conversation.id)
                 ChatSelection.shared.select(conversation.id, options: [.collapseSidebar, .focusEditor])
                 dismiss(animated: true)
@@ -302,6 +431,13 @@ extension SettingController.SettingContent {
         }
 
         private func presentError(_ error: Error) {
+            switch error as? PiServiceError {
+            case .unsupportedGatewayVersion, .capabilityUnavailable:
+                compatibilityError = String(localized: "Update the Jonwork server, then try again.")
+                tableView.reloadData()
+            default:
+                break
+            }
             let alert = AlertViewController(
                 title: "Jonwork",
                 message: "\(error.localizedDescription)"
