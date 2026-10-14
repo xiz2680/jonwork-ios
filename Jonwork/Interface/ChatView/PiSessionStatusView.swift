@@ -4,12 +4,12 @@ import UIKit
 final class PiSessionStatusView: UIView {
     let actionButton = UIButton(type: .system).with {
         var configuration = UIButton.Configuration.plain()
-        configuration.image = UIImage(systemName: "ellipsis")
+        configuration.image = UIImage(systemName: "square.and.pencil")
         configuration.contentInsets = .zero
         $0.configuration = configuration
-        $0.showsMenuAsPrimaryAction = true
-        $0.accessibilityLabel = String(localized: "Conversation actions")
-        $0.accessibilityIdentifier = "JonworkConversationActions"
+        $0.showsMenuAsPrimaryAction = false
+        $0.accessibilityLabel = String(localized: "New Conversation")
+        $0.accessibilityIdentifier = "JonworkNewConversation"
     }
 
     let stopButton = UIButton(type: .system).with {
@@ -23,20 +23,19 @@ final class PiSessionStatusView: UIView {
     }
 
     var onStop: (() -> Void)?
+    var onNewConversation: (() -> Void)?
 
     init() {
         super.init(frame: .zero)
         isAccessibilityElement = false
         actionButton.isAccessibilityElement = true
         stopButton.isAccessibilityElement = true
-        let stack = UIStackView(arrangedSubviews: [stopButton, actionButton])
+        let stack = UIStackView(arrangedSubviews: [actionButton])
         stack.axis = .horizontal
         stack.alignment = .center
         stack.spacing = 0
         addSubview(stack)
         stack.translatesAutoresizingMaskIntoConstraints = false
-        let stopWidth = stopButton.widthAnchor.constraint(equalToConstant: 44)
-        stopWidth.priority = UILayoutPriority(999)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -44,10 +43,9 @@ final class PiSessionStatusView: UIView {
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
             actionButton.widthAnchor.constraint(equalToConstant: 44),
             actionButton.heightAnchor.constraint(equalToConstant: 44),
-            stopWidth,
-            stopButton.heightAnchor.constraint(equalToConstant: 44),
         ])
         stopButton.addAction(UIAction { [weak self] _ in self?.onStop?() }, for: .touchUpInside)
+        actionButton.addAction(UIAction { [weak self] _ in self?.onNewConversation?() }, for: .touchUpInside)
         isHidden = true
     }
 

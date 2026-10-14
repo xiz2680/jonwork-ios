@@ -34,7 +34,7 @@ class IconButton: UIView {
 
     required convenience init(icon: String) {
         self.init()
-        imageView.image = UIImage(named: icon)?
+        imageView.image = (UIImage(systemName: icon) ?? UIImage(named: icon))?
             .withRenderingMode(.alwaysTemplate)
     }
 
@@ -44,14 +44,14 @@ class IconButton: UIView {
                 self.change(icon: icon, animated: false)
             }, completion: nil)
         } else {
-            imageView.image = UIImage(named: icon)?
+            imageView.image = (UIImage(systemName: icon) ?? UIImage(named: icon))?
                 .withRenderingMode(.alwaysTemplate)
         }
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        imageView.frame = bounds.insetBy(dx: 2, dy: 2)
+        imageView.frame = bounds.insetBy(dx: max(2, (bounds.width - 26) / 2), dy: max(2, (bounds.height - 26) / 2))
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
@@ -64,7 +64,7 @@ class IconButton: UIView {
     @objc private func buttonAction() {
         guard !isHidden else { return }
         guard alpha > 0 else { return }
-        puddingAnimate()
+        if !UIAccessibility.isReduceMotionEnabled { puddingAnimate() }
         tapAction()
     }
 }

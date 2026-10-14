@@ -1,0 +1,23 @@
+{
+  "contract": "jonwork-home/1.0",
+  "identity": {
+    "subject": "fixture-main-user",
+    "scopeType": "enterprise",
+    "scopeId": "fixture-enterprise",
+    "workspaceId": "fixture-workspace",
+    "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "capabilities": {
+    "history": true,
+    "snapshot": true,
+    "eventReplay": true,
+    "mutations": false,
+    "identitySwitch": false
+  },
+  "blocked": [
+    {
+      "capability": "mutations",
+      "reason": "shared_web_native_admission_required"
+    }
+  ]
+}

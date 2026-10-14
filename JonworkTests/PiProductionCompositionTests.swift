@@ -45,7 +45,7 @@ struct PiProductionCompositionTests {
         let onlyConversation = sdb.conversationMake { $0.update(\.title, to: "Temporary") }
         ConversationManager.shared.scanAll()
         selectionView.updateDataSource()
-        #expect(selectionView.dataSource.snapshot().numberOfItems == 1)
+        #expect(selectionView.dataSource.snapshot().numberOfItems == 0)
 
         ConversationManager.shared.deleteConversation(identifier: onlyConversation.id)
         selectionView.updateDataSource()
@@ -80,7 +80,10 @@ struct PiProductionCompositionTests {
         var toolReloadCalled = false
         #expect(view.onRichEditorRequestCurrentModelName() == nil)
         #expect(view.onRichEditorRequestCurrentModelIdentifier() == nil)
-        #expect(view.onRichEditorRequestObjectForRestore() == nil)
+        #expect(view.onRichEditorRequestObjectForRestore()?.text == "")
+        #expect(view.onRichEditorRequestObjectForRestore()?.attachments.isEmpty == true)
+        view.onRichEditorUpdateObject(object: .init(text: "Unsent Pi draft"))
+        #expect(view.onRichEditorRequestObjectForRestore()?.text == "Unsent Pi draft")
         #expect(view.onRichEditorBuildModelSelectionMenu { modelCompletionCalled = true }.isEmpty)
         #expect(view.onRichEditorBuildAlternativeModelMenu().isEmpty)
         #expect(view.onRichEditorBuildAlternativeToolsMenu(isEnabled: true) { _ in
@@ -91,7 +94,7 @@ struct PiProductionCompositionTests {
         #expect(!toolReloadCalled)
 
         #expect(view.title.buildMenu() == nil)
-        #expect(view.title.menuButton.isHidden)
+        #expect(!view.title.menuButton.isHidden)
 
         let cell = ConversationSelectionView.Cell(style: .default, reuseIdentifier: nil)
         cell.use(conversation, allowsLegacyConversations: false)
@@ -99,7 +102,7 @@ struct PiProductionCompositionTests {
         #expect(cell.contextMenuInteraction(
             interaction,
             configurationForMenuAtLocation: .zero
-        ) == nil)
+        ) != nil)
 
         #expect(ConversationManager.shared.menu(
             forConversation: conversation.id,
@@ -155,20 +158,17 @@ struct PiProductionCompositionTests {
 
     @Test
     @MainActor
-    func `streaming controller gets a direct stop action`() {
-        let statusView = PiSessionStatusView()
-        var state = PiConversationState()
-        state.role = .controller
-        state.isStreaming = true
-
-        statusView.update(.init(conversation: state, connection: .connected))
-
-        #expect(!statusView.stopButton.isHidden)
-        #expect(statusView.stopButton.accessibilityLabel == String(localized: "Stop Response"))
-
-        state.role = .viewer
-        statusView.update(.init(conversation: state, connection: .connected))
-        #expect(statusView.stopButton.isHidden)
+    func `streaming controller gets a direct composer stop action`() {
+        let editor = InputEditor()
+        editor.usesJonworkLayout = true
+        var stopped = false
+        editor.onJonworkStop = { stopped = true }
+        editor.isJonworkStreaming = true
+        #expect(editor.sendButton.accessibilityLabel == String(localized: "Stop Response"))
+        editor.sendButton.tapAction()
+        #expect(stopped)
+        editor.isJonworkStreaming = false
+        #expect(editor.sendButton.accessibilityLabel == String(localized: "Send"))
     }
 
     @Test
@@ -348,6 +348,28 @@ struct PiProductionCompositionTests {
         #expect(PiSessionCoordinator.shared.binding(for: conversation.id) == nil)
         #expect(sdb.conversationWith(identifier: conversation.id) == nil)
         #expect(ConversationManager.shared.conversations.value.isEmpty)
+    }
+
+    @Test @MainActor
+    func lostPiBindingCannotRevealLegacyEditorOrTransientRowsEvenWithDebugOverride() async throws {
+        try await JonworkTestContext.shared.ensureBootstrappedEnvironment()
+        let conversation = sdb.conversationMake { $0.update(\.title, to: "Account scope fixture") }
+        ConversationManager.shared.scanAll()
+        PiSessionCoordinator.shared.bind(conversationID: conversation.id, sessionID: "fixture-session", repository: "fixture-repo", clientID: "fixture-client", baseURL: URL(string: "https://scope.fixture.test")!)
+        defer { ConversationManager.shared.deleteConversation(identifier: conversation.id) }
+        let session = ConversationSessionManager.shared.session(for: conversation.id)
+        let row = session.appendTransientMessage(role: .assistant)
+        row.update(\.document, to: "Old account timeline")
+        let view = ChatView(allowsLegacyConversations: true)
+        view.use(conversation: conversation.id)
+        view.onRichEditorUpdateObject(object: .init(text: "Old account draft"))
+        PiSessionCoordinator.shared.unbind(conversationID: conversation.id)
+        try await waitUntil { view.editor.isHidden }
+        #expect(!view.editor.isUserInteractionEnabled)
+        #expect(view.conversationIdentifier == nil)
+        #expect(!session.messages.contains { $0.document == "Old account timeline" })
+        #expect(view.editor.collectObject().text.isEmpty)
+        #expect(view.jonworkUnavailableView.detailLabel.text == String(localized: "Choose an available conversation from your workspace."))
     }
 
     private func makeDefaults() -> UserDefaults {

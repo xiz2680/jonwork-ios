@@ -20,8 +20,5 @@ class SidebarBrandingLabel: BrandingLabel {
 
     override func updateBrandingLabel() {
         super.updateBrandingLabel()
-        #if DEBUG
-            text? += " 🐦"
-        #endif
     }
 }

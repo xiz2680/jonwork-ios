@@ -99,9 +99,9 @@ import UIKit
 #endif
 
 extension SettingController {
-    static func makeJonworkWorkspaceController() -> UIViewController {
+    static func makeJonworkWorkspaceController(startsNewConversation: Bool = false, startsSearching: Bool = false) -> UIViewController {
         let navigationController = UINavigationController()
-        configureJonworkWorkspace(in: navigationController)
+        configureJonworkWorkspace(in: navigationController, workspace: SettingContent.PiServerController(startsNewConversation: startsNewConversation, startsSearching: startsSearching))
         return navigationController
     }
 

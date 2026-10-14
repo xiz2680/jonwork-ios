@@ -136,7 +136,12 @@ final class ShimmerTextLabel: UILabel {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        NotificationCenter.default.addObserver(self, selector: #selector(motionPreferenceChanged), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
         setupGradientLayer()
+    }
+
+    @objc private func motionPreferenceChanged() {
+        if UIAccessibility.isReduceMotionEnabled { stopShimmer() }
     }
 
     @available(*, unavailable)
@@ -219,6 +224,7 @@ final class ShimmerTextLabel: UILabel {
 
     /// Start the shimmer animation
     func startShimmer() {
+        guard !UIAccessibility.isReduceMotionEnabled else { stopShimmer(); return }
         guard !isAnimating else { return }
 
         // Cache intrinsic size before changing text color

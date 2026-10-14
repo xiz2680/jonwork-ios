@@ -19,6 +19,12 @@ extension SettingController {
         nonisolated(unsafe) let objects: [ConfigurableObject] = {
             var objects: [ConfigurableObject] = [
                 .init(
+                    icon: "cpu",
+                    title: "Model & AI",
+                    explain: "Default model and thinking depth.",
+                    ephemeralAnnotation: .page { PiModelAIController(conversationID: ChatSelection.shared.currentSelection.identifier) },
+                ),
+                .init(
                     icon: "gear",
                     title: "General",
                     explain: "Adjust the conversation appearance and editor behavior.",
@@ -31,14 +37,12 @@ extension SettingController {
                     ephemeralAnnotation: .page { SupportController() },
                 ),
             ]
-            #if DEBUG
-                objects.insert(.init(
-                    icon: "network",
-                    title: "Developer Connection",
-                    explain: "Connect to a development gateway and inspect agent sessions.",
-                    ephemeralAnnotation: .page { PiServerController() },
-                ), at: 0)
-            #endif
+            objects.insert(.init(
+                icon: "person.crop.circle",
+                title: "Jonwork Workspace",
+                explain: "Sign in securely to access your workspace.",
+                ephemeralAnnotation: .page { PiServerController() },
+            ), at: 0)
             return objects
         }()
 

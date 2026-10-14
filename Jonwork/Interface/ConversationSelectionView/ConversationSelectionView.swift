@@ -70,6 +70,10 @@ class ConversationSelectionView: UIView {
         tableView.sectionHeaderHeight = UITableView.automaticDimension
 
         updateDataSource()
+        NotificationCenter.default.publisher(for: .piSessionDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateDataSource() }
+            .store(in: &cancellables)
 
         Publishers.CombineLatest(
             ConversationManager.shared.conversations,
@@ -127,7 +131,14 @@ class ConversationSelectionView: UIView {
     }
 
     func updateDataSource() {
-        let list = ConversationManager.shared.conversations.value.values
+        let list = ConversationManager.shared.conversations.value.values.filter {
+            allowsLegacyConversations || PiSessionCoordinator.shared.binding(for: $0.id) != nil
+        }.sorted {
+            let lhs = PiSessionCoordinator.shared.nativeFlags(for: $0.id)
+            let rhs = PiSessionCoordinator.shared.nativeFlags(for: $1.id)
+            if lhs.pinned != rhs.pinned { return lhs.pinned }
+            return $0.creation > $1.creation
+        }
         guard !list.isEmpty else {
             if JonworkSurfacePolicy.shouldCreateInitialConversation(
                 isConversationListEmpty: true,
@@ -142,7 +153,7 @@ class ConversationSelectionView: UIView {
 
         var snapshot = Snapshot()
 
-        let favorited = list.filter(\.isFavorite)
+        let favorited = list.filter { $0.isFavorite || PiSessionCoordinator.shared.nativeFlags(for: $0.id).favorite || PiSessionCoordinator.shared.nativeFlags(for: $0.id).pinned }
         if !favorited.isEmpty {
             let favoriteSection = Date(timeIntervalSince1970: -1)
             snapshot.appendSections([favoriteSection])
@@ -152,7 +163,7 @@ class ConversationSelectionView: UIView {
         let calendar = Calendar.current
 
         var conversationsByDate: [Date: [Conversation.ID]] = [:]
-        for item in list where !item.isFavorite {
+        for item in list where !favorited.contains(where: { $0.id == item.id }) {
             let dateOnly = calendar.startOfDay(for: item.creation)
             if conversationsByDate[dateOnly] == nil {
                 conversationsByDate[dateOnly] = []

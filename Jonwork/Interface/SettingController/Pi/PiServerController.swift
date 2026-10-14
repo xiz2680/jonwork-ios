@@ -13,7 +13,10 @@ extension SettingController.SettingContent {
 
         private let domainCoordinator: PiServerDomainCoordinator
         private let gatewayConfiguration: PiGatewayDeploymentConfiguration
+        private let homeClient: HomeGatewayClient
         private let autoConnect: Bool
+        let startsNewConversation: Bool
+        let startsSearching: Bool
         private let clientID = PiInstallationIdentity.current()
         private var repositories: [PiRepositoryPresentation] = []
         private var sessions: [PiSessionPresentation] = []
@@ -31,11 +34,18 @@ extension SettingController.SettingContent {
         init(
             profileStore: PiServerProfileStore = PiServerProfileStore(),
             gatewayConfiguration: PiGatewayDeploymentConfiguration = .live,
-            autoConnect: Bool = true
+            autoConnect: Bool = true,
+            startsNewConversation: Bool = false,
+            startsSearching: Bool = false,
+            domainCoordinator: PiServerDomainCoordinator? = nil,
+            homeClient: HomeGatewayClient? = nil
         ) {
-            domainCoordinator = PiServerDomainCoordinator(profileStore: profileStore)
+            self.domainCoordinator = domainCoordinator ?? PiServerDomainCoordinator(profileStore: profileStore)
             self.gatewayConfiguration = gatewayConfiguration
+            self.homeClient = homeClient ?? HomeGatewayClient(origin: gatewayConfiguration.baseURL)
             self.autoConnect = autoConnect
+            self.startsNewConversation = startsNewConversation
+            self.startsSearching = startsSearching
             super.init(style: .insetGrouped)
             title = String(localized: "Jonwork Workspace")
         }
@@ -47,6 +57,11 @@ extension SettingController.SettingContent {
 
         override func viewDidLoad() {
             super.viewDidLoad()
+            tableView.backgroundColor = .systemGroupedBackground
+            let groupedBackground = UIView()
+            groupedBackground.backgroundColor = .systemGroupedBackground
+            tableView.backgroundView = groupedBackground
+            navigationController?.view.backgroundColor = .systemGroupedBackground
             tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
             navigationItem.largeTitleDisplayMode = .never
             let searchController = UISearchController(searchResultsController: nil)
@@ -61,9 +76,7 @@ extension SettingController.SettingContent {
             }, for: .valueChanged)
             self.refreshControl = refreshControl
             do {
-                if gatewayConfiguration.accepts(try domainCoordinator.savedProfile()) {
-                    hasSavedToken = try domainCoordinator.hasSavedCredentials()
-                }
+                hasSavedToken = try hasAnySavedCredentials()
                 if autoConnect {
                     DispatchQueue.main.async { [weak self] in self?.startConnect() }
                 }
@@ -72,9 +85,26 @@ extension SettingController.SettingContent {
             }
         }
 
+        private func hasAnySavedCredentials() throws -> Bool {
+            let profile = try domainCoordinator.savedProfile()
+            let pi = try gatewayConfiguration.accepts(profile) && domainCoordinator.hasSavedCredentials()
+            let home = try homeClient.hasSavedCredentials()
+            return pi || home
+        }
+
         func prepareForEntry() {
             loadViewIfNeeded()
             if !hasSavedToken { presentNativeSignIn(animated: false, allowsBackNavigation: false) }
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            guard startsSearching, navigationController?.topViewController === self else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.navigationController?.topViewController === self else { return }
+                self.navigationItem.searchController?.isActive = true
+                self.navigationItem.searchController?.searchBar.becomeFirstResponder()
+            }
         }
 
         override func numberOfSections(in _: UITableView) -> Int {
@@ -121,7 +151,7 @@ extension SettingController.SettingContent {
                 ($0.name ?? "").localizedCaseInsensitiveContains(query)
                     || $0.id.localizedCaseInsensitiveContains(query)
             }
-            tableView.reloadSections(IndexSet(integer: Section.sessions.rawValue), with: .none)
+            tableView.reloadData()
             guard !query.isEmpty, isConnected else { return }
             searchTask = Task { @MainActor [weak self] in
                 do {
@@ -131,7 +161,7 @@ extension SettingController.SettingContent {
                               .trimmingCharacters(in: .whitespacesAndNewlines) == query
                     else { return }
                     sessions = try await domainCoordinator.searchSessions(query: query)
-                    tableView.reloadSections(IndexSet(integer: Section.sessions.rawValue), with: .none)
+                    tableView.reloadData()
                 } catch is CancellationError {
                     return
                 } catch {
@@ -297,12 +327,13 @@ extension SettingController.SettingContent {
                 let url = gatewayConfiguration.baseURL
                 setLoading(true)
                 defer { setLoading(false) }
+                if try homeClient.hasSavedCredentials(), try await openHomeIfAvailable(anchorController: self) { return }
                 let presentation = try await domainCoordinator.authenticate(
                     baseURL: url,
                     authorizer: makeOAuthClient(anchorController: self)
                 )
                 apply(presentation)
-                hasSavedToken = try domainCoordinator.hasSavedCredentials()
+                hasSavedToken = try hasAnySavedCredentials()
                 await openDefaultSession()
             } catch is CancellationError {
                 return
@@ -312,7 +343,7 @@ extension SettingController.SettingContent {
                 sessions = []
                 allSessions = []
                 selectedRepository = nil
-                hasSavedToken = (try? domainCoordinator.hasSavedCredentials()) ?? false
+                hasSavedToken = (try? hasAnySavedCredentials()) ?? false
                 tableView.reloadData()
                 if !hasSavedToken, PiAuthenticationRecoveryPolicy.requiresFreshSignIn(after: error) {
                     presentNativeSignIn(allowsBackNavigation: false)
@@ -334,12 +365,13 @@ extension SettingController.SettingContent {
                     setLoading(false)
                     signInController.setLoading(false)
                 }
+                if try await openHomeIfAvailable(anchorController: signInController) { return }
                 let presentation = try await domainCoordinator.authenticate(
                     baseURL: url,
                     authorizer: makeOAuthClient(anchorController: signInController)
                 )
                 apply(presentation)
-                hasSavedToken = try domainCoordinator.hasSavedCredentials()
+                hasSavedToken = try hasAnySavedCredentials()
                 signInController.onCancelAuthentication = nil
                 let openDefaultSession: () -> Void = { [weak self] in
                     _ = Task { @MainActor in await self?.openDefaultSession() }
@@ -360,9 +392,10 @@ extension SettingController.SettingContent {
                 sessions = []
                 allSessions = []
                 selectedRepository = nil
-                hasSavedToken = (try? domainCoordinator.hasSavedCredentials()) ?? false
+                hasSavedToken = (try? hasAnySavedCredentials()) ?? false
                 tableView.reloadData()
                 signInController.showError(error)
+                PiAuthenticationDiagnostics.failure(error, phase: "native-sign-in")
             }
         }
 
@@ -370,6 +403,20 @@ extension SettingController.SettingContent {
             PiOAuthClient(anchor: { [weak anchorController] in
                 anchorController?.view.window ?? ASPresentationAnchor()
             })
+        }
+
+        private func openHomeIfAvailable(anchorController: UIViewController) async throws -> Bool {
+            do { _ = try await homeClient.discover() }
+            catch PiServiceError.gatewayUnavailable { return false }
+            let handshake = try await homeClient.signIn(anchor: { [weak anchorController] in
+                anchorController?.view.window ?? ASPresentationAnchor()
+            })
+            try Task.checkCancellation()
+            try await domainCoordinator.signOut(preservingHomePreferences: true)
+            (anchorController as? PiSignInViewController)?.onCancelAuthentication = nil
+            hasSavedToken = try hasAnySavedCredentials()
+            navigationController?.setViewControllers([HomeConversationHistoryController(client: homeClient, handshake: handshake)], animated: true)
+            return true
         }
 
         private func presentNativeSignIn(animated: Bool = true, allowsBackNavigation: Bool = true) {
@@ -403,8 +450,8 @@ extension SettingController.SettingContent {
         }
 
         private func openDefaultSession() async {
-            guard isConnected, selectedRepository != nil else { return }
-            await openSession(resumeSessionID: PiDefaultSessionPolicy.sessionID(in: allSessions))
+            guard !startsSearching, isConnected, selectedRepository != nil else { return }
+            await openSession(resumeSessionID: startsNewConversation ? nil : PiDefaultSessionPolicy.sessionID(in: allSessions))
         }
 
         private func startConnect() {
@@ -415,12 +462,12 @@ extension SettingController.SettingContent {
             }
         }
 
-        private func confirmRemoveSavedToken() {
+        func confirmRemoveSavedToken(onCancel: (() -> Void)? = nil) {
             let alert = AlertViewController(
                 title: "Sign Out?",
                 message: "Your sign-in information will be removed from this device."
             ) { context in
-                context.addAction(title: "Cancel") { context.dispose() }
+                context.addAction(title: "Cancel") { context.dispose(); onCancel?() }
                 context.addAction(title: "Sign Out", attribute: .accent) { [weak self] in
                     context.dispose()
                     Task { await self?.removeSavedToken() }
@@ -442,12 +489,12 @@ extension SettingController.SettingContent {
                 sessions = []
                 allSessions = []
                 selectedRepository = nil
-                hasSavedToken = (try? domainCoordinator.hasSavedCredentials()) ?? false
+                hasSavedToken = (try? hasAnySavedCredentials()) ?? false
                 tableView.reloadData()
             }
             do {
-                try await domainCoordinator.signOut()
-                hasSavedToken = (try? domainCoordinator.hasSavedCredentials()) ?? false
+                try await domainCoordinator.signOut(homeClient: homeClient, anchor: { [weak self] in self?.view.window ?? ASPresentationAnchor() })
+                hasSavedToken = (try? hasAnySavedCredentials()) ?? false
                 if !hasSavedToken {
                     presentNativeSignIn(animated: false, allowsBackNavigation: false)
                 }
@@ -484,7 +531,7 @@ extension SettingController.SettingContent {
             }
         }
 
-        private func apply(_ presentation: PiServerPresentation) {
+        func apply(_ presentation: PiServerPresentation) {
             repositories = presentation.repositories
             allSessions = presentation.sessions
             selectedRepository = presentation.selectedRepositoryID
@@ -544,6 +591,9 @@ extension SettingController.SettingContent {
                     localSession.notifyMessagesDidChange()
                 }
                 createdSession.bind(conversationID: conversation.id)
+                if resumeSessionID == nil {
+                    try await PiSessionCoordinator.shared.applyDefaultConfiguration(to: conversation.id)
+                }
                 ChatSelection.shared.select(conversation.id, options: [.collapseSidebar, .focusEditor])
                 dismiss(animated: true)
             } catch is CancellationError {

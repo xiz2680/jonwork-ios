@@ -11,7 +11,7 @@ final class ActivityReportingLabel: UIView {
         set {
             textLabel.text = newValue ?? .init()
             setNeedsLayout()
-            UIView.animate(withDuration: 0.28, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0) {
+            doWithAnimation(duration: 0.28) {
                 self.layoutIfNeeded()
             }
         }

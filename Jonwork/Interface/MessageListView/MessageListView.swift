@@ -4,6 +4,7 @@
 //
 
 import AlertController
+import AVFoundation
 import Combine
 import ListViewKit
 import Litext
@@ -13,6 +14,9 @@ import Storage
 import UIKit
 
 final class MessageListView: UIView {
+    let speechSynthesizer = AVSpeechSynthesizer()
+    var speechAuthorization: (() -> Bool)?
+    var readOnlyContentAuthorization: (() -> Bool)?
     private lazy var listView: ListViewKit.ListView = .init()
 
     var contentSize: CGSize {
@@ -29,6 +33,7 @@ final class MessageListView: UIView {
 
     var session: ConversationSession! {
         didSet {
+            speechSynthesizer.stopSpeaking(at: .immediate)
             isFirstLoad = true
             alpha = 0
             sessionScopedCancellables.forEach { $0.cancel() }
@@ -82,8 +87,29 @@ final class MessageListView: UIView {
     private(set) lazy var markdownViewForSizeCalculation: MarkdownTextView = .init()
     private(set) lazy var markdownPackageCache: MarkdownPackageCache = .init()
 
+    func guardCapturedPresentation(_ controller: UIViewController, authorization: @escaping () -> Bool) {
+        NotificationCenter.default.publisher(for: .piAuthenticationEpochDidChange)
+            .merge(with: NotificationCenter.default.publisher(for: .piSessionDidChange))
+            .merge(with: NotificationCenter.default.publisher(for: .homeAuthorizationDidChange))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak controller] _ in
+                guard !authorization() else { return }
+                (controller as? CodeEditorController)?.textView.text = ""
+                controller?.dismiss(animated: false)
+            }.store(in: &viewCancellables)
+    }
+
     init() {
         super.init(frame: .zero)
+        NotificationCenter.default.publisher(for: .piSessionDidChange)
+            .merge(with: NotificationCenter.default.publisher(for: .homeAuthorizationDidChange))
+            .merge(with: NotificationCenter.default.publisher(for: .piAuthenticationEpochDidChange))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, let id = self.session?.id else { return }
+                if self.speechAuthorization?() == false || PiSessionCoordinator.shared.binding(for: id) == nil { self.speechSynthesizer.stopSpeaking(at: .immediate) }
+            }
+            .store(in: &viewCancellables)
 
         listView.delegate = self
         listView.adapter = self

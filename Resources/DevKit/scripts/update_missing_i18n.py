@@ -165,6 +165,8 @@ NEW_STRINGS: dict[str, dict[str, str]] = {
     "Restoring conversation…": {"de": "Unterhaltung wird wiederhergestellt…", "es": "Restaurando conversación…", "fr": "Restauration de la conversation…", "ja": "会話を復元中…", "ko": "대화 복원 중…", "zh-Hans": "正在恢复对话…"},
     "Delete Conversation?": {"de": "Unterhaltung löschen?", "es": "¿Eliminar conversación?", "fr": "Supprimer la conversation ?", "ja": "会話を削除しますか？", "ko": "대화를 삭제할까요?", "zh-Hans": "删除对话？"},
     "This permanently deletes the conversation from the server.": {"de": "Dadurch wird die Unterhaltung dauerhaft vom Server gelöscht.", "es": "Esto elimina permanentemente la conversación del servidor.", "fr": "Cette action supprime définitivement la conversation du serveur.", "ja": "サーバーから会話が完全に削除されます。", "ko": "서버에서 대화가 영구적으로 삭제됩니다.", "zh-Hans": "这将从服务器永久删除该对话。"},
+    "Compact Context": {"de": "Kontext komprimieren", "es": "Compactar contexto", "fr": "Compacter le contexte", "ja": "コンテキストを圧縮", "ko": "컨텍스트 압축", "zh-Hans": "压缩上下文"},
+    "Summarize earlier context to make room for the next messages. The conversation stays available.": {"de": "Fassen Sie den bisherigen Kontext zusammen, um Platz für weitere Nachrichten zu schaffen. Die Unterhaltung bleibt verfügbar.", "es": "Resume el contexto anterior para dejar espacio a los próximos mensajes. La conversación sigue disponible.", "fr": "Résumez le contexte précédent pour laisser de la place aux prochains messages. La conversation reste disponible.", "ja": "以前のコンテキストを要約して、次のメッセージのための領域を確保します。会話は引き続き利用できます。", "ko": "이전 컨텍스트를 요약하여 다음 메시지를 위한 공간을 확보합니다. 대화는 계속 이용할 수 있습니다.", "zh-Hans": "概括先前的上下文，为后续消息腾出空间。会话仍然可用。"},
     "Sign In with Jonwork": {
         "de": "Mit Jonwork anmelden",
         "es": "Iniciar sesión con Jonwork",
@@ -975,6 +977,516 @@ NEW_STRINGS.update({'Share Conversation Data?': {'en': 'Share Conversation Data?
                                                                                                      'zh-Hans': '打开公开 '
                                                                                                                 'GitHub '
                                                                                                                 '问题页面。请勿发布密码、令牌、私人对话或附件。'}})
+
+NEW_STRINGS.update({'Add & Reference': {'de': 'Hinzufügen und Referenzieren',
+                     'es': 'Añadir y referenciar',
+                     'fr': 'Ajouter et référencer',
+                     'ja': '追加と参照',
+                     'ko': '추가 및 참조',
+                     'zh-Hans': '添加与引用'},
+ 'Attachments': {'de': 'Anhänge',
+                 'es': 'Archivos adjuntos',
+                 'fr': 'Pièces jointes',
+                 'ja': '添付ファイル',
+                 'ko': '첨부 파일',
+                 'zh-Hans': '附件'},
+ "Available sources follow this workspace and model's attachment permissions.": {'de': 'Verfügbare '
+                                                                                       'Quellen '
+                                                                                       'richten '
+                                                                                       'sich nach '
+                                                                                       'den '
+                                                                                       'Anhangberechtigungen '
+                                                                                       'des '
+                                                                                       'Arbeitsbereichs '
+                                                                                       'und '
+                                                                                       'Modells.',
+                                                                                 'es': 'Las '
+                                                                                       'fuentes '
+                                                                                       'disponibles '
+                                                                                       'dependen '
+                                                                                       'de los '
+                                                                                       'permisos '
+                                                                                       'de '
+                                                                                       'adjuntos '
+                                                                                       'del '
+                                                                                       'espacio y '
+                                                                                       'del '
+                                                                                       'modelo.',
+                                                                                 'fr': 'Les '
+                                                                                       'sources '
+                                                                                       'disponibles '
+                                                                                       'dépendent '
+                                                                                       'des '
+                                                                                       'autorisations '
+                                                                                       'de pièces '
+                                                                                       'jointes de '
+                                                                                       'cet espace '
+                                                                                       'et de ce '
+                                                                                       'modèle.',
+                                                                                 'ja': '利用できる項目は、このワークスペースとモデルの添付権限に従います。',
+                                                                                 'ko': '사용 가능한 항목은 '
+                                                                                       '이 작업 공간과 '
+                                                                                       '모델의 첨부 권한에 '
+                                                                                       '따라 달라집니다.',
+                                                                                 'zh-Hans': '可用来源取决于当前工作区与模型的附件权限。'},
+ 'Changes are confirmed by the server before the selection updates.': {'de': 'Die Auswahl wird '
+                                                                             'erst nach '
+                                                                             'Bestätigung durch '
+                                                                             'den Server '
+                                                                             'aktualisiert.',
+                                                                       'es': 'La selección se '
+                                                                             'actualiza cuando el '
+                                                                             'servidor confirma '
+                                                                             'los cambios.',
+                                                                       'fr': 'La sélection est '
+                                                                             'mise à jour après '
+                                                                             'confirmation par le '
+                                                                             'serveur.',
+                                                                       'ja': 'サーバーが変更を確認してから選択が更新されます。',
+                                                                       'ko': '서버에서 변경을 확인한 후 선택이 '
+                                                                             '업데이트됩니다.',
+                                                                       'zh-Hans': '服务器确认更改后，选中项才会更新。'},
+ 'Completed': {'de': 'Abgeschlossen',
+               'es': 'Completado',
+               'fr': 'Terminé',
+               'ja': '完了',
+               'ko': '완료',
+               'zh-Hans': '已完成'},
+ 'Conversation Activity': {'de': 'Unterhaltungsaktivität',
+                           'es': 'Actividad de la conversación',
+                           'fr': 'Activité de la conversation',
+                           'ja': '会話のアクティビティ',
+                           'ko': '대화 활동',
+                           'zh-Hans': '会话活动'},
+ 'Current Conversation': {'de': 'Aktuelle Unterhaltung',
+                          'es': 'Conversación actual',
+                          'fr': 'Conversation actuelle',
+                          'ja': '現在の会話',
+                          'ko': '현재 대화',
+                          'zh-Hans': '当前会话'},
+ 'Default Settings': {'de': 'Standardeinstellungen',
+                      'es': 'Configuración predeterminada',
+                      'fr': 'Réglages par défaut',
+                      'ja': 'デフォルト設定',
+                      'ko': '기본 설정',
+                      'zh-Hans': '默认设置'},
+ 'Default model and thinking depth.': {'de': 'Standardmodell und Denktiefe.',
+                                       'es': 'Modelo y profundidad de razonamiento '
+                                             'predeterminados.',
+                                       'fr': 'Modèle et profondeur de réflexion par défaut.',
+                                       'ja': 'デフォルトのモデルと思考の深さ。',
+                                       'ko': '기본 모델과 사고 깊이입니다.',
+                                       'zh-Hans': '默认模型与思考深度。'},
+ 'Defaults apply to new conversations in this authenticated workspace. Signing out removes them.': {'de': 'Diese '
+                                                                                                          'Vorgaben '
+                                                                                                          'gelten '
+                                                                                                          'für '
+                                                                                                          'neue '
+                                                                                                          'Unterhaltungen '
+                                                                                                          'im '
+                                                                                                          'angemeldeten '
+                                                                                                          'Arbeitsbereich '
+                                                                                                          'und '
+                                                                                                          'werden '
+                                                                                                          'beim '
+                                                                                                          'Abmelden '
+                                                                                                          'entfernt.',
+                                                                                                    'es': 'Los '
+                                                                                                          'valores '
+                                                                                                          'predeterminados '
+                                                                                                          'se '
+                                                                                                          'aplican '
+                                                                                                          'a '
+                                                                                                          'nuevas '
+                                                                                                          'conversaciones '
+                                                                                                          'en '
+                                                                                                          'este '
+                                                                                                          'espacio '
+                                                                                                          'autenticado '
+                                                                                                          'y '
+                                                                                                          'se '
+                                                                                                          'borran '
+                                                                                                          'al '
+                                                                                                          'cerrar '
+                                                                                                          'sesión.',
+                                                                                                    'fr': 'Ces '
+                                                                                                          'réglages '
+                                                                                                          's’appliquent '
+                                                                                                          'aux '
+                                                                                                          'nouvelles '
+                                                                                                          'conversations '
+                                                                                                          'de '
+                                                                                                          'cet '
+                                                                                                          'espace '
+                                                                                                          'connecté '
+                                                                                                          'et '
+                                                                                                          'sont '
+                                                                                                          'supprimés '
+                                                                                                          'à '
+                                                                                                          'la '
+                                                                                                          'déconnexion.',
+                                                                                                    'ja': 'この認証済みワークスペースの新しい会話に適用されます。サインアウトすると削除されます。',
+                                                                                                    'ko': '이 '
+                                                                                                          '로그인된 '
+                                                                                                          '작업 '
+                                                                                                          '공간의 '
+                                                                                                          '새 '
+                                                                                                          '대화에 '
+                                                                                                          '적용됩니다. '
+                                                                                                          '로그아웃하면 '
+                                                                                                          '삭제됩니다.',
+                                                                                                    'zh-Hans': '默认设置用于此已登录工作区的新会话，退出登录后会清除。'},
+ 'Execution': {'de': 'Ausführung',
+               'es': 'Ejecución',
+               'fr': 'Exécution',
+               'ja': '実行状況',
+               'ko': '실행',
+               'zh-Hans': '执行过程'},
+ 'Export': {'de': 'Exportieren',
+            'es': 'Exportar',
+            'fr': 'Exporter',
+            'ja': '書き出し',
+            'ko': '내보내기',
+            'zh-Hans': '导出'},
+ 'Export Conversation': {'de': 'Unterhaltung exportieren',
+                         'es': 'Exportar conversación',
+                         'fr': 'Exporter la conversation',
+                         'ja': '会話を書き出す',
+                         'ko': '대화 내보내기',
+                         'zh-Hans': '导出会话'},
+ 'Failed': {'de': 'Fehlgeschlagen',
+            'es': 'Falló',
+            'fr': 'Échec',
+            'ja': '失敗',
+            'ko': '실패',
+            'zh-Hans': '失败'},
+ 'Files': {'de': 'Dateien',
+           'es': 'Archivos',
+           'fr': 'Fichiers',
+           'ja': 'ファイル',
+           'ko': '파일',
+           'zh-Hans': '文件'},
+ 'Home history is available. Sending and editing require the next server capability update.': {'de': 'Hier '
+                                                                                                     'können '
+                                                                                                     'Sie '
+                                                                                                     'den '
+                                                                                                     'Home-Verlauf '
+                                                                                                     'ansehen. '
+                                                                                                     'Senden '
+                                                                                                     'und '
+                                                                                                     'Bearbeiten '
+                                                                                                     'sind '
+                                                                                                     'noch '
+                                                                                                     'nicht '
+                                                                                                     'verfügbar.',
+                                                                                               'es': 'Puedes '
+                                                                                                     'ver '
+                                                                                                     'el '
+                                                                                                     'historial '
+                                                                                                     'de '
+                                                                                                     'Home '
+                                                                                                     'aquí. '
+                                                                                                     'Enviar '
+                                                                                                     'y '
+                                                                                                     'editar '
+                                                                                                     'aún '
+                                                                                                     'no '
+                                                                                                     'están '
+                                                                                                     'disponibles.',
+                                                                                               'fr': 'Vous '
+                                                                                                     'pouvez '
+                                                                                                     'consulter '
+                                                                                                     'l’historique '
+                                                                                                     'Home '
+                                                                                                     'ici. '
+                                                                                                     'L’envoi '
+                                                                                                     'et '
+                                                                                                     'la '
+                                                                                                     'modification '
+                                                                                                     'ne '
+                                                                                                     'sont '
+                                                                                                     'pas '
+                                                                                                     'encore '
+                                                                                                     'disponibles.',
+                                                                                               'ja': 'ここではHomeの履歴を確認できます。送信と編集はまだ利用できません。',
+                                                                                               'ko': '여기에서 '
+                                                                                                     'Home '
+                                                                                                     '기록을 '
+                                                                                                     '볼 '
+                                                                                                     '수 '
+                                                                                                     '있습니다. '
+                                                                                                     '보내기와 '
+                                                                                                     '편집은 '
+                                                                                                     '아직 '
+                                                                                                     '사용할 '
+                                                                                                     '수 '
+                                                                                                     '없습니다.',
+                                                                                               'zh-Hans': '可在此查看 '
+                                                                                                          'Home '
+                                                                                                          '历史。发送与编辑暂不可用。'},
+ 'Markdown': {'de': 'Markdown',
+              'es': 'Markdown',
+              'fr': 'Markdown',
+              'ja': 'Markdown',
+              'ko': 'Markdown',
+              'zh-Hans': 'Markdown'},
+ 'Maximum': {'de': 'Maximum',
+             'es': 'Máximo',
+             'fr': 'Maximum',
+             'ja': '最大',
+             'ko': '최대',
+             'zh-Hans': '最高'},
+ 'Minimal': {'de': 'Minimal',
+             'es': 'Mínimo',
+             'fr': 'Minimal',
+             'ja': '最小',
+             'ko': '최소',
+             'zh-Hans': '极少'},
+ 'Model & AI': {'de': 'Modell und KI',
+                'es': 'Modelo e IA',
+                'fr': 'Modèle et IA',
+                'ja': 'モデルとAI',
+                'ko': '모델 및 AI',
+                'zh-Hans': '模型与 AI'},
+ 'Open an authenticated conversation to configure Model & AI.': {'de': 'Öffnen Sie eine '
+                                                                       'angemeldete Unterhaltung, '
+                                                                       'um Modell und KI '
+                                                                       'einzustellen.',
+                                                                 'es': 'Abre una conversación '
+                                                                       'autenticada para '
+                                                                       'configurar el modelo y la '
+                                                                       'IA.',
+                                                                 'fr': 'Ouvrez une conversation '
+                                                                       'connectée pour configurer '
+                                                                       'le modèle et l’IA.',
+                                                                 'ja': '認証済みの会話を開いてモデルとAIを設定してください。',
+                                                                 'ko': '로그인된 대화를 열어 모델 및 AI를 '
+                                                                       '설정하세요.',
+                                                                 'zh-Hans': '打开已登录的会话后，可配置模型与 AI。'},
+ 'Pin': {'de': 'Anheften',
+         'es': 'Fijar',
+         'fr': 'Épingler',
+         'ja': '固定',
+         'ko': '고정',
+         'zh-Hans': '置顶'},
+ 'Read Aloud': {'de': 'Vorlesen',
+                'es': 'Leer en voz alta',
+                'fr': 'Lire à voix haute',
+                'ja': '読み上げ',
+                'ko': '소리 내어 읽기',
+                'zh-Hans': '朗读'},
+ 'Remove': {'de': 'Entfernen',
+            'es': 'Quitar',
+            'fr': 'Retirer',
+            'ja': '削除',
+            'ko': '제거',
+            'zh-Hans': '移除'},
+ 'Remove Favorite': {'de': 'Favorit entfernen',
+                     'es': 'Quitar de favoritos',
+                     'fr': 'Retirer des favoris',
+                     'ja': 'お気に入りから削除',
+                     'ko': '즐겨찾기 해제',
+                     'zh-Hans': '取消收藏'},
+ 'Results': {'de': 'Ergebnisse',
+             'es': 'Resultados',
+             'fr': 'Résultats',
+             'ja': '結果',
+             'ko': '결과',
+             'zh-Hans': '结果'},
+ 'Select messages, or export the whole conversation.': {'de': 'Wählen Sie Nachrichten aus oder '
+                                                              'exportieren Sie die gesamte '
+                                                              'Unterhaltung.',
+                                                        'es': 'Selecciona mensajes o exporta la '
+                                                              'conversación completa.',
+                                                        'fr': 'Sélectionnez des messages ou '
+                                                              'exportez toute la conversation.',
+                                                        'ja': 'メッセージを選択するか、会話全体を書き出してください。',
+                                                        'ko': '메시지를 선택하거나 전체 대화를 내보내세요.',
+                                                        'zh-Hans': '选择消息，或导出整段会话。'},
+ 'Selected Attachments': {'de': 'Ausgewählte Anhänge',
+                          'es': 'Adjuntos seleccionados',
+                          'fr': 'Pièces jointes sélectionnées',
+                          'ja': '選択した添付ファイル',
+                          'ko': '선택한 첨부 파일',
+                          'zh-Hans': '已选附件'},
+ 'Send': {'de': 'Senden',
+          'es': 'Enviar',
+          'fr': 'Envoyer',
+          'ja': '送信',
+          'ko': '보내기',
+          'zh-Hans': '发送'},
+ 'Thinking': {'de': 'Denken',
+              'es': 'Razonamiento',
+              'fr': 'Réflexion',
+              'ja': '思考',
+              'ko': '사고',
+              'zh-Hans': '思考'},
+ 'Unable to Complete Action': {'de': 'Aktion konnte nicht abgeschlossen werden',
+                               'es': 'No se pudo completar la acción',
+                               'fr': 'Impossible de terminer l’action',
+                               'ja': '操作を完了できません',
+                               'ko': '작업을 완료할 수 없습니다',
+                               'zh-Hans': '无法完成操作'},
+ 'Unpin': {'de': 'Lösen',
+           'es': 'Desfijar',
+           'fr': 'Désépingler',
+           'ja': '固定を解除',
+           'ko': '고정 해제',
+           'zh-Hans': '取消置顶'},
+ 'Very High': {'de': 'Sehr hoch',
+               'es': 'Muy alto',
+               'fr': 'Très élevé',
+               'ja': '非常に高い',
+               'ko': '매우 높음',
+               'zh-Hans': '很高'},
+ 'Working…': {'de': 'Wird bearbeitet…',
+              'es': 'Trabajando…',
+              'fr': 'En cours…',
+              'ja': '処理中…',
+              'ko': '작업 중…',
+              'zh-Hans': '处理中…'}})
+
+NEW_STRINGS.update({'Another conversation change is still being sent. Try again in a moment.': {'de': 'Eine andere Änderung '
+                                                                                   'wird noch gesendet. '
+                                                                                   'Versuchen Sie es gleich '
+                                                                                   'erneut.',
+                                                                             'es': 'Aún se está enviando '
+                                                                                   'otro cambio. Inténtalo '
+                                                                                   'de nuevo en un momento.',
+                                                                             'fr': 'Une autre modification '
+                                                                                   'est encore en cours '
+                                                                                   'd’envoi. Réessayez dans '
+                                                                                   'un instant.',
+                                                                             'ja': '別の変更を送信中です。しばらくしてから再試行してください。',
+                                                                             'ko': '다른 변경 사항을 보내는 중입니다. 잠시 후 '
+                                                                                   '다시 시도하세요.',
+                                                                             'zh-Hans': '其他会话更改仍在发送，请稍后重试。'},
+ 'Conversation history must be restored from the server.': {'de': 'Der Verlauf muss vom Server '
+                                                                  'wiederhergestellt werden.',
+                                                            'es': 'El historial debe restaurarse desde el '
+                                                                  'servidor.',
+                                                            'fr': 'L’historique doit être restauré depuis le '
+                                                                  'serveur.',
+                                                            'ja': 'サーバーから会話履歴を復元する必要があります。',
+                                                            'ko': '서버에서 대화 기록을 복원해야 합니다.',
+                                                            'zh-Hans': '需要从服务器恢复会话历史。'},
+ 'Jonwork could not complete the request.': {'de': 'Jonwork konnte die Anfrage nicht abschließen.',
+                                             'es': 'Jonwork no pudo completar la solicitud.',
+                                             'fr': 'Jonwork n’a pas pu terminer la demande.',
+                                             'ja': 'Jonworkはリクエストを完了できませんでした。',
+                                             'ko': 'Jonwork가 요청을 완료하지 못했습니다.',
+                                             'zh-Hans': 'Jonwork 无法完成请求。'},
+ 'Retry Failed Response': {'de': 'Fehlgeschlagene Antwort erneut versuchen',
+                           'es': 'Reintentar respuesta fallida',
+                           'fr': 'Réessayer la réponse échouée',
+                           'ja': '失敗した応答を再試行',
+                           'ko': '실패한 응답 재시도',
+                           'zh-Hans': '重试失败的回复'},
+ 'The conversation changed on another device. Restoring the latest version…': {'de': 'Die Unterhaltung wurde '
+                                                                                     'auf einem anderen '
+                                                                                     'Gerät geändert. Die '
+                                                                                     'aktuelle Version wird '
+                                                                                     'wiederhergestellt…',
+                                                                               'es': 'La conversación cambió '
+                                                                                     'en otro dispositivo. '
+                                                                                     'Restaurando la última '
+                                                                                     'versión…',
+                                                                               'fr': 'La conversation a '
+                                                                                     'changé sur un autre '
+                                                                                     'appareil. Restauration '
+                                                                                     'de la dernière '
+                                                                                     'version…',
+                                                                               'ja': '別のデバイスで会話が変更されました。最新の状態を復元中…',
+                                                                               'ko': '다른 기기에서 대화가 변경되었습니다. '
+                                                                                     '최신 버전을 복원 중…',
+                                                                               'zh-Hans': '会话已在其他设备上更改，正在恢复最新版本…'},
+ 'The selected attachments exceed the server limit.': {'de': 'Die ausgewählten Anhänge überschreiten das '
+                                                             'Serverlimit.',
+                                                       'es': 'Los adjuntos seleccionados superan el límite '
+                                                             'del servidor.',
+                                                       'fr': 'Les pièces jointes sélectionnées dépassent la '
+                                                             'limite du serveur.',
+                                                       'ja': '選択した添付ファイルがサーバーの上限を超えています。',
+                                                       'ko': '선택한 첨부 파일이 서버 제한을 초과합니다.',
+                                                       'zh-Hans': '所选附件超出服务器限制。'},
+ 'This conversation is no longer available.': {'de': 'Diese Unterhaltung ist nicht mehr verfügbar.',
+                                               'es': 'Esta conversación ya no está disponible.',
+                                               'fr': 'Cette conversation n’est plus disponible.',
+                                               'ja': 'この会話はもう利用できません。',
+                                               'ko': '이 대화는 더 이상 사용할 수 없습니다.',
+                                               'zh-Hans': '此会话已不可用。'},
+ 'This server does not support secure native sign-in.': {'de': 'Dieser Server unterstützt keine sichere '
+                                                               'native Anmeldung.',
+                                                         'es': 'Este servidor no admite inicio de sesión '
+                                                               'nativo seguro.',
+                                                         'fr': 'Ce serveur ne prend pas en charge la '
+                                                               'connexion native sécurisée.',
+                                                         'ja': 'このサーバーは安全なネイティブサインインに対応していません。',
+                                                         'ko': '이 서버는 안전한 기본 앱 로그인을 지원하지 않습니다.',
+                                                         'zh-Hans': '此服务器不支持安全的原生登录。'},
+ 'This server or model does not support the requested attachment.': {'de': 'Dieser Server oder dieses Modell '
+                                                                           'unterstützt den angeforderten '
+                                                                           'Anhang nicht.',
+                                                                     'es': 'Este servidor o modelo no admite '
+                                                                           'el adjunto solicitado.',
+                                                                     'fr': 'Ce serveur ou ce modèle ne prend '
+                                                                           'pas en charge la pièce jointe '
+                                                                           'demandée.',
+                                                                     'ja': 'このサーバーまたはモデルは、指定の添付ファイルに対応していません。',
+                                                                     'ko': '이 서버 또는 모델은 요청한 첨부 파일을 지원하지 '
+                                                                           '않습니다.',
+                                                                     'zh-Hans': '此服务器或模型不支持所请求的附件。'}})
+
+NEW_STRINGS.update({'Awaiting Clarification': {'de': 'Klärung ausstehend',
+                            'es': 'Esperando aclaración',
+                            'fr': 'En attente de précisions',
+                            'ja': '回答待ち',
+                            'ko': '추가 답변 대기 중',
+                            'zh-Hans': '等待补充说明'},
+ 'Awaiting Confirmation': {'de': 'Bestätigung ausstehend',
+                           'es': 'Esperando confirmación',
+                           'fr': 'En attente de confirmation',
+                           'ja': '確認待ち',
+                           'ko': '확인 대기 중',
+                           'zh-Hans': '等待确认'},
+ 'Research Outline': {'de': 'Recherchegliederung',
+                      'es': 'Esquema de investigación',
+                      'fr': 'Plan de recherche',
+                      'ja': '調査の概要',
+                      'ko': '연구 개요',
+                      'zh-Hans': '研究提纲'},
+ 'Stopped': {'de': 'Angehalten',
+             'es': 'Detenido',
+             'fr': 'Arrêté',
+             'ja': '停止',
+             'ko': '중지됨',
+             'zh-Hans': '已停止'},
+ 'Usage': {'de': 'Nutzung',
+           'es': 'Uso',
+           'fr': 'Utilisation',
+           'ja': '使用量',
+           'ko': '사용량',
+           'zh-Hans': '用量'}})
+
+NEW_STRINGS.update({'Choose an available conversation from your workspace.': {'de': 'Wählen Sie eine verfügbare '
+                                                                 'Unterhaltung aus Ihrem '
+                                                                 'Arbeitsbereich.',
+                                                           'es': 'Elige una conversación '
+                                                                 'disponible en tu espacio de '
+                                                                 'trabajo.',
+                                                           'fr': 'Choisissez une conversation '
+                                                                 'disponible dans votre espace de '
+                                                                 'travail.',
+                                                           'ja': 'ワークスペースから利用可能な会話を選んでください。',
+                                                           'ko': '작업 공간에서 사용 가능한 대화를 선택하세요.',
+                                                           'zh-Hans': '请从工作区选择可用的会话。'}})
+
+NEW_STRINGS.update({'Jonwork': {'de': 'Jonwork',
+             'es': 'Jonwork',
+             'fr': 'Jonwork',
+             'ja': 'Jonwork',
+             'ko': 'Jonwork',
+             'zh-Hans': 'Jonwork'}})
 
 if __name__ == "__main__":
     file_path = sys.argv[1] if len(sys.argv) > 1 else default_file_path()

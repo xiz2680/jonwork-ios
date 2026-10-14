@@ -5,6 +5,34 @@ import Testing
 
 @Suite(.serialized)
 struct PiGatewayV1Tests {
+    @Test(arguments: ["authorizationEndpoint", "credentialEndpoint", "tokenEndpoint", "revocationEndpoint"])
+    func oauthDiscoveryRejectsEveryForeignCredentialDestination(_ field: String) throws {
+        let original = try fixture("discovery.json")
+        for destination in ["https://foreign.example/credentials", "https://gateway.example.test:444/credentials", "http://gateway.example.test/credentials", "https://gateway.example.test/credentials?token=fixture", "https://user@gateway.example.test/credentials", "https://user:password@gateway.example.test/credentials", "https://gateway.example.test/credentials#fragment"] {
+            var object = try #require(JSONSerialization.jsonObject(with: original) as? [String: Any])
+            var authentication = try #require(object["authentication"] as? [String: Any])
+            authentication[field] = destination
+            object["authentication"] = authentication
+            let discovery = try JSONDecoder.piGateway.decode(PiGatewayWire.Discovery.self, from: JSONSerialization.data(withJSONObject: object))
+            #expect(throws: PiServiceError.unsupportedAuthentication) {
+                try discovery.validate(baseURL: URL(string: "https://gateway.example.test")!)
+            }
+        }
+    }
+
+    @Test
+    func normalizedHostAndDefaultHTTPSPortAreEquivalentForAllAuthEndpoints() throws {
+        var object = try #require(JSONSerialization.jsonObject(with: fixture("discovery.json")) as? [String: Any])
+        var authentication = try #require(object["authentication"] as? [String: Any])
+        for key in ["authorizationEndpoint", "credentialEndpoint", "tokenEndpoint", "revocationEndpoint"] {
+            authentication[key] = "https://GATEWAY.EXAMPLE.TEST:443/v1/auth/" + key
+        }
+        object["authentication"] = authentication
+        let discovery = try JSONDecoder.piGateway.decode(PiGatewayWire.Discovery.self, from: JSONSerialization.data(withJSONObject: object))
+        try discovery.validate(baseURL: URL(string: "https://gateway.example.test")!)
+        try discovery.validate(baseURL: URL(string: "https://GATEWAY.EXAMPLE.TEST:443")!)
+    }
+
     @Test
     func `frozen discovery validates required production capabilities`() throws {
         let discovery = try decodeFixture(PiGatewayWire.Discovery.self, "discovery.json")

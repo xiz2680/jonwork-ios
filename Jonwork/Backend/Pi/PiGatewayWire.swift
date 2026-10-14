@@ -69,7 +69,12 @@ enum PiGatewayWire {
                       endpoint.host != nil,
                       endpoint.user == nil,
                       endpoint.password == nil,
-                      endpoint.fragment == nil
+                      endpoint.fragment == nil,
+                      endpoint.query == nil,
+                      scheme == baseURL.scheme?.lowercased(),
+                      endpoint.host?.lowercased() == baseURL.host?.lowercased(),
+                      (endpoint.port ?? (scheme == "https" ? 443 : 80))
+                        == (baseURL.port ?? (baseURL.scheme?.lowercased() == "https" ? 443 : 80))
                 else { throw PiServiceError.unsupportedAuthentication }
             }
         }

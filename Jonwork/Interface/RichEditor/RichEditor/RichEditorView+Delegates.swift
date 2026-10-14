@@ -279,11 +279,19 @@ extension RichEditorView {
 
 extension RichEditorView: InputEditor.Delegate {
     func onInputEditorCaptureButtonTapped() {
+        if isJonworkConversation { presentJonworkAttachments(); return }
         openCamera()
     }
 
     func onInputEditorPickAttachmentTapped() {
+        if isJonworkConversation { presentJonworkAttachments(); return }
         openFilePicker()
+    }
+
+    private func presentJonworkAttachments() {
+        guard let presenter = parentViewController, presenter.presentedViewController == nil else { return }
+        let navigation = UINavigationController(rootViewController: PiAddReferenceController(editor: self))
+        presenter.present(navigation, animated: true)
     }
 
     func onInputEditorMicButtonTapped() {
@@ -474,7 +482,8 @@ private extension RichEditorView {
 }
 
 extension RichEditorView: AttachmentsBar.Delegate {
-    public func attachmentBarDidUpdateAttachments(_: [AttachmentsBar.Item]) {
+    public func attachmentBarDidUpdateAttachments(_ attachments: [AttachmentsBar.Item]) {
+        inputEditor.hasAttachments = !attachments.isEmpty
         publishNewEditorStatus()
     }
 }

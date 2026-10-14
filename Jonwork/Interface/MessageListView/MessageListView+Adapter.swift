@@ -9,6 +9,7 @@ import Litext
 import MarkdownView
 import Storage
 import UIKit
+import AVFoundation
 
 private extension MessageListView {
     enum RowType {
@@ -309,6 +310,10 @@ extension MessageListView: ListViewAdapter {
         }
         sections.append(title)
 
+        if PiSessionCoordinator.shared.binding(for: session.id) != nil || readOnlyContentAuthorization != nil {
+            return Self.piToolDetailsText(title: title, detail: status.message)
+        }
+
         if let message = session.message(for: messageIdentifier) {
             if let toolRequest = session.decodeToolRequestFromToolMessage(message) {
                 var parameterText = toolRequest.args
@@ -341,6 +346,11 @@ extension MessageListView: ListViewAdapter {
         return sections.joined(separator: "\n\n")
     }
 
+    static func piToolDetailsText(title: String, detail: String) -> String {
+        let result = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        return result.isEmpty ? title : [title, String(localized: "Result"), result].joined(separator: "\n\n")
+    }
+
     private func prettyPrintedJSON(from jsonString: String) -> String? {
         guard let data = jsonString.data(using: .utf8) else { return nil }
         guard let object = try? JSONSerialization.jsonObject(with: data) else {
@@ -361,7 +371,10 @@ extension MessageListView: ListViewAdapter {
         isReasoningContent: Bool,
         referenceView: UIView?,
     ) -> UIMenu {
-        UIMenu(children: [
+        if PiSessionCoordinator.shared.binding(for: session.id) != nil || readOnlyContentAuthorization != nil {
+            return Self.piReadOnlyMenu(content: representation.content, referenceView: referenceView, anchor: self, authorization: readOnlyContentAuthorization)
+        }
+        return UIMenu(children: [
             UIMenu(options: [.displayInline], children: [
                 { () -> UIAction? in
                     guard let message = session.message(for: messageIdentifier),
@@ -496,6 +509,65 @@ extension MessageListView: ListViewAdapter {
                 ]),
             ]),
         ])
+    }
+
+    /// Pi history is authoritative on the gateway. Local edit/retry/delete actions
+    /// belong exclusively to legacy conversations, including when Pi is a viewer.
+    static func piReadOnlyMenu(content: String, referenceView: UIView?, anchor: MessageListView, authorization: (() -> Bool)? = nil) -> UIMenu {
+        let conversationID = anchor.session?.id
+        let context = PiPresentationAuthorization(conversationID: conversationID)
+        let isCurrent: () -> Bool = authorization ?? { context.isCurrent }
+        var actions: [UIMenuElement] = [
+            UIAction(title: String(localized: "Copy"), image: .init(systemName: "doc.on.doc")) { _ in
+                guard isCurrent() else { return }
+                UIPasteboard.general.string = content
+                Indicator.present(title: "Copied", preset: .done, referencingView: anchor)
+            },
+            UIAction(title: String(localized: "View Raw"), image: .init(systemName: "eye")) { [weak anchor] _ in
+                guard isCurrent() else { return }
+                let controller = anchor?.presentAndReturnDetailCodeController(
+                    code: .init(string: content), language: "markdown", title: String(localized: "Raw Content")
+                )
+                if let controller { anchor?.guardCapturedPresentation(controller, authorization: isCurrent) }
+            },
+            UIAction(title: String(localized: "Share"), image: .init(systemName: "square.and.arrow.up")) { [weak anchor] _ in
+                guard isCurrent() else { return }
+                guard let anchor else { return }
+                DisposableExporter(data: Data(content.utf8), pathExtension: "txt").run(anchor: anchor, mode: .text, authorization: isCurrent)
+            },
+        ]
+        actions.append(UIAction(title: String(localized: "Read Aloud"), image: UIImage(systemName: "speaker.wave.2")) { [weak anchor] _ in
+            guard let anchor, isCurrent() else { return }
+            if anchor.speechSynthesizer.isSpeaking {
+                anchor.speechSynthesizer.stopSpeaking(at: .immediate)
+            } else {
+                anchor.speechAuthorization = isCurrent
+                anchor.speechSynthesizer.speak(AVSpeechUtterance(string: content))
+            }
+        })
+        actions.append(UIMenu(title: String(localized: "Export"), children: [
+            UIAction(title: String(localized: "Markdown")) { [weak anchor] _ in
+                guard let anchor, isCurrent() else { return }
+                DisposableExporter(data: Data(content.utf8), pathExtension: "md").run(anchor: anchor, authorization: isCurrent)
+            },
+            UIAction(title: "PDF") { [weak anchor] _ in
+                guard let anchor, isCurrent() else { return }
+                let message = PiPresentationMessage(id: "export", role: .assistant, text: content, reasoning: "", tool: nil)
+                DisposableExporter(data: PiConversationExport.pdf(title: String(localized: "Message"), messages: [message]), pathExtension: "pdf").run(anchor: anchor, authorization: isCurrent)
+            },
+        ]))
+        if let referenceView {
+            actions.append(UIAction(title: String(localized: "Copy as Image"), image: .init(systemName: "text.below.photo")) { [weak anchor, weak referenceView] _ in
+                guard let anchor, let referenceView else { return }
+                guard isCurrent() else { return }
+                let renderer = UIGraphicsImageRenderer(bounds: referenceView.bounds)
+                UIPasteboard.general.image = renderer.image { context in
+                    referenceView.layer.render(in: context.cgContext)
+                }
+                Indicator.present(title: "Copied", preset: .done, referencingView: anchor)
+            })
+        }
+        return UIMenu(children: actions)
     }
 
     @discardableResult

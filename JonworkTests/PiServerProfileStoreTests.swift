@@ -5,6 +5,39 @@ import UIKit
 
 @Suite(.serialized)
 struct PiServerProfileStoreTests {
+    @Test @MainActor
+    func freshAccountAuthorizationPurgesOldPreferencesDraftsAndFencesAnotherDomainCallback() async throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        let url = URL(string: "https://pi.example.test")!
+        let expired = PiOAuthTokens(accessToken: "expired-account-a", refreshToken: nil, expiresAt: .distantPast)
+        let accountB = PiOAuthTokens(accessToken: "new-account-b", refreshToken: "new-account-b-refresh", expiresAt: .distantFuture)
+        try context.store.save(baseURL: url, oauthTokens: expired)
+        let coordinator = PiSessionCoordinator(defaults: context.defaults, profileProvider: { try context.store.load() },
+            serviceFactory: { TokenAwareService(token: $0.token, validToken: expired.accessToken) },
+            pendingMutationStore: ProfilePendingStore(), renderOverride: { _, _ in })
+        let binding = PiSessionCoordinator.Binding(sessionID: "shared-session", repository: "/repo", clientID: "same-installation", baseURL: url)
+        coordinator.bind(conversationID: "conversation", sessionID: binding.sessionID, repository: binding.repository, clientID: binding.clientID, baseURL: binding.baseURL)
+        coordinator.saveTextDraft("account A private draft", conversationID: "conversation")
+        coordinator.saveNativeFlags(.init(favorite: true, pinned: true), conversationID: "conversation")
+        PiConversationPreferences(defaults: context.defaults).save(.init(provider: "old-provider", modelID: "old-model", thinkingLevel: .medium), binding: binding)
+        let suspended = SuspendedAuthorizer()
+        let oldDomain = PiServerDomainCoordinator(profileStore: context.store, sessionCoordinator: coordinator, pendingMutationStore: ProfilePendingStore(), serviceFactory: { TokenAwareService(token: $0.token, validToken: expired.accessToken) })
+        let oldTask = Task { try await oldDomain.authenticate(baseURL: url, authorizer: suspended) }
+        while !suspended.isSuspended { await Task.yield() }
+        let newDomain = PiServerDomainCoordinator(profileStore: context.store, sessionCoordinator: coordinator, pendingMutationStore: ProfilePendingStore(), serviceFactory: { TokenAwareService(token: $0.token, validToken: accountB.accessToken) })
+        _ = try await newDomain.authenticate(baseURL: url, authorizer: ControlledRefreshAuthorizer(result: .success(accountB)))
+        suspended.resume(with: .init(accessToken: "late-account-a", refreshToken: "late-account-a-refresh", expiresAt: .distantFuture))
+        await #expect(throws: CancellationError.self) { _ = try await oldTask.value }
+        #expect(try context.store.oauthTokens(baseURL: url) == accountB)
+        #expect(coordinator.binding(for: "conversation") == nil)
+        #expect(coordinator.textDraft(for: "conversation").isEmpty)
+        let persisted = PiConversationPreferences(defaults: context.defaults)
+        #expect(persisted.flags(for: binding) == .init())
+        #expect(persisted.configuration(for: binding) == nil)
+        await coordinator.revokeAllCredentialsAndState()
+    }
+
     @Test
     func `blank token preserves credential for the same server`() throws {
         let context = makeContext()
@@ -181,6 +214,82 @@ struct PiServerProfileStoreTests {
         )
         #expect(!candidate.accepts(productionProfile))
         #expect(candidate.accepts(PiServerProfile(baseURL: candidate.baseURL, token: nil)))
+    }
+
+    @Test(arguments: [false, true])
+    @MainActor
+    func `fresh coordinator sign out revokes saved tokens without authorizing and clears local credentials on failure`(fails: Bool) async throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        let url = URL(string: "https://pi.example.test")!
+        let tokens = PiOAuthTokens(accessToken: "saved-access", refreshToken: "saved-refresh", expiresAt: .distantFuture)
+        try context.store.save(baseURL: url, oauthTokens: tokens)
+        let authorizer = LogoutAuthorizer(fails: fails)
+        let domain = PiServerDomainCoordinator(
+            profileStore: context.store, pendingMutationStore: ProfilePendingStore(),
+            revocationAuthorizer: authorizer,
+            serviceFactory: { _ in TokenAwareService(token: nil, validToken: "unused") }
+        )
+        if fails {
+            await #expect(throws: PiServiceError.networkUnavailable) { try await domain.signOut() }
+        } else { try await domain.signOut() }
+        #expect(authorizer.revoked == tokens)
+        #expect(authorizer.authorizationCount == 0)
+        #expect(try !context.store.hasSavedToken())
+        #expect(!domain.presentation.isConnected)
+    }
+
+    @Test
+    @MainActor
+    func `fresh sign out refuses cross origin token revocation but clears saved identity`() async throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        let url = URL(string: "https://pi.example.test")!
+        try context.store.save(baseURL: url, oauthTokens: .init(accessToken: "secret-access", refreshToken: "secret-refresh", expiresAt: .distantFuture))
+        let authorizer = LogoutAuthorizer(fails: false)
+        let domain = PiServerDomainCoordinator(
+            profileStore: context.store, pendingMutationStore: ProfilePendingStore(), revocationAuthorizer: authorizer,
+            serviceFactory: { _ in LogoutDiscoveryService() }
+        )
+        await #expect(throws: PiServiceError.unsupportedAuthentication) { try await domain.signOut() }
+        #expect(authorizer.revoked == nil)
+        #expect(authorizer.authorizationCount == 0)
+        #expect(try !context.store.hasSavedToken())
+    }
+
+    @Test
+    @MainActor
+    func `fresh domain logout invalidates old authenticated service refresh before it can restore keychain`() async throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        let url = URL(string: "https://pi.example.test")!
+        let old = PiOAuthTokens(accessToken: "old-access", refreshToken: "old-refresh", expiresAt: Date().addingTimeInterval(900))
+        let rotated = PiOAuthTokens(accessToken: "new-access", refreshToken: "new-refresh", expiresAt: .distantFuture)
+        try context.store.save(baseURL: url, oauthTokens: old)
+        let authorizer = ControlledRefreshAuthorizer(result: .success(rotated), suspended: true)
+        let coordinator = PiSessionCoordinator(
+            defaults: context.defaults, profileProvider: { try context.store.load() },
+            serviceFactory: { TokenAwareService(token: $0.token, validToken: rotated.accessToken) },
+            pendingMutationStore: ProfilePendingStore(), renderOverride: { _, _ in }
+        )
+        let originalDomain = PiServerDomainCoordinator(
+            profileStore: context.store, sessionCoordinator: coordinator, pendingMutationStore: ProfilePendingStore(),
+            serviceFactory: { TokenAwareService(token: $0.token, validToken: rotated.accessToken) }
+        )
+        _ = try await originalDomain.authenticate(baseURL: url, authorizer: authorizer)
+        let oldServiceRequest = Task { try await originalDomain.searchSessions(query: "force-refresh") }
+        while !authorizer.isWaitingForResume { await Task.yield() }
+        let freshDomain = PiServerDomainCoordinator(
+            profileStore: context.store, sessionCoordinator: coordinator, pendingMutationStore: ProfilePendingStore(),
+            revocationAuthorizer: LogoutAuthorizer(fails: false),
+            serviceFactory: { TokenAwareService(token: $0.token, validToken: rotated.accessToken) }
+        )
+        try await freshDomain.signOut()
+        authorizer.resume()
+        await #expect(throws: CancellationError.self) { _ = try await oldServiceRequest.value }
+        #expect(try context.store.oauthTokens(baseURL: url) == nil)
+        #expect(try !context.store.hasSavedToken())
+        #expect(!freshDomain.presentation.isConnected)
     }
 
     @Test
@@ -538,6 +647,12 @@ private final class TokenAwareService: PiServiceProtocol, @unchecked Sendable {
     }
 
     func discover() async throws -> PiGatewayWire.Discovery { authRaceDiscovery() }
+    func listRepositories() async throws -> [PiGatewayWire.Repository] { [.init(id: "/repo", displayName: "Repo")] }
+    func listSessions(repositoryID _: String?) async throws -> [PiGatewayWire.SessionSummary] { [] }
+    func searchSessions(repositoryID _: String?, query _: String, state _: PiGatewayWire.SessionLifecycle?, limit _: Int) async throws -> [PiGatewayWire.SessionSummary] {
+        guard token == validToken else { throw PiServiceError.authenticationRequired }
+        return []
+    }
 
     func snapshot(sessionID: String) async throws -> PiGatewayWire.Snapshot {
         guard token == validToken else { throw PiServiceError.authenticationRequired }
@@ -675,7 +790,7 @@ private final class ProfilePendingStore: PiPendingMutationStoring, @unchecked Se
     func saveCreation(_ value: PiPendingCreationRecord?) throws { lock.withLock { creation = value } }
 }
 
-private func authRaceDiscovery() -> PiGatewayWire.Discovery {
+private func authRaceDiscovery(revocationEndpoint: URL = URL(string: "https://pi.example.test/revoke")!) -> PiGatewayWire.Discovery {
     .init(
         contract: PiGatewayWire.contract,
         apiVersion: "1.0",
@@ -685,7 +800,7 @@ private func authRaceDiscovery() -> PiGatewayWire.Discovery {
             authorizationEndpoint: URL(string: "https://pi.example.test/authorize")!,
             credentialEndpoint: URL(string: "https://pi.example.test/password")!,
             tokenEndpoint: URL(string: "https://pi.example.test/token")!,
-            revocationEndpoint: URL(string: "https://pi.example.test/revoke")!,
+            revocationEndpoint: revocationEndpoint,
             scopes: ["pi.gateway"], pkceMethods: ["S256"], accessTokenLifetimeSeconds: 900,
             refreshTokenRotation: "required"
         ),
@@ -788,4 +903,29 @@ private final class CancelAwareAuthorizer: PiOAuthAuthorizing, @unchecked Sendab
         throw PiOAuthError.invalidAuthorizationResponse
     }
     func refresh(_ tokens: PiOAuthTokens, discovery _: PiGatewayWire.Discovery) async throws -> PiOAuthTokens { tokens }
+}
+
+private final class LogoutAuthorizer: PiOAuthAuthorizing, @unchecked Sendable {
+    private let lock = NSLock()
+    private let fails: Bool
+    private var captured: PiOAuthTokens?
+    private var calls = 0
+    init(fails: Bool) { self.fails = fails }
+    var revoked: PiOAuthTokens? { lock.withLock { captured } }
+    var authorizationCount: Int { lock.withLock { calls } }
+    @MainActor func authorize(discovery _: PiGatewayWire.Discovery, baseURL _: URL) async throws -> PiOAuthTokens {
+        lock.withLock { calls += 1 }
+        throw PiOAuthError.refreshUnavailable
+    }
+    func refresh(_: PiOAuthTokens, discovery _: PiGatewayWire.Discovery) async throws -> PiOAuthTokens { throw PiOAuthError.refreshUnavailable }
+    func revoke(_ tokens: PiOAuthTokens, discovery _: PiGatewayWire.Discovery) async throws {
+        lock.withLock { captured = tokens }
+        if fails { throw PiServiceError.networkUnavailable }
+    }
+}
+
+private struct LogoutDiscoveryService: PiServiceProtocol {
+    func discover() async throws -> PiGatewayWire.Discovery {
+        authRaceDiscovery(revocationEndpoint: URL(string: "https://untrusted.example/revoke")!)
+    }
 }

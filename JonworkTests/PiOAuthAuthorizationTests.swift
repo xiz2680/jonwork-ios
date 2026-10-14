@@ -4,6 +4,37 @@ import Foundation
 import Testing
 
 struct PiOAuthAuthorizationTests {
+    @Test(arguments: [301, 302, 303, 307, 308])
+    func credentialBearingRequestsNeverFollowRedirects(_ status: Int) async throws {
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        for target in ["https://jonwork.com/other", "https://foreign.example/token", "http://jonwork.com/token"] {
+            var original = URLRequest(url: URL(string: "https://jonwork.com/v1/auth/token")!)
+            original.httpMethod = "POST"
+            original.httpBody = Data("refresh_token=fixture".utf8)
+            let task = session.dataTask(with: original)
+            let response = try #require(HTTPURLResponse(url: original.url!, statusCode: status, httpVersion: nil, headerFields: ["Location": target]))
+            var redirected = URLRequest(url: URL(string: target)!)
+            redirected.httpMethod = "POST"
+            redirected.httpBody = original.httpBody
+            let permitted: URLRequest? = await withCheckedContinuation { continuation in
+                PiOAuthRequestDelegate.shared.urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: redirected) {
+                    continuation.resume(returning: $0)
+                }
+            }
+            #expect(permitted == nil)
+            task.cancel()
+        }
+    }
+
+    @Test @MainActor
+    func signInDistinguishesNetworkAndTimeoutFromGatewayOutage() {
+        for error in [PiServiceError.timedOut, .networkUnavailable, .connectionLost, .transportFailure(code: -1200)] {
+            #expect(PiSignInViewController.presentedMessage(for: error) == error.localizedDescription)
+            #expect(PiSignInViewController.presentedMessage(for: error) != PiServiceError.gatewayUnavailable.localizedDescription)
+        }
+    }
+
     private var authentication: PiGatewayWire.Authentication {
         .init(type: "oauth2", clientId: "jonwork-ios",
               authorizationEndpoint: URL(string: "https://jonwork.com/api/oauth/authorize")!,

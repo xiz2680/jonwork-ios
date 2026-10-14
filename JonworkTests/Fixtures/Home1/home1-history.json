@@ -1,0 +1,27 @@
+{
+  "contract": "jonwork-home/1.0",
+  "identity": {
+    "subject": "fixture-main-user",
+    "scopeType": "enterprise",
+    "scopeId": "fixture-enterprise",
+    "workspaceId": "fixture-workspace",
+    "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "sessions": [
+    {
+      "id": "fixture-session",
+      "session_id": "fixture-session",
+      "title": "Fixture branch/result roundtrip",
+      "created_at": 1.0,
+      "updated_at": 2.0,
+      "message_count": 3,
+      "last_message": "Fixture graph",
+      "status": "completed",
+      "preferences": {
+        "selected_branches": {
+          "null": 2
+        }
+      }
+    }
+  ]
+}

@@ -1,6 +1,47 @@
 import AuthenticationServices
 import CryptoKit
 import Foundation
+import OSLog
+
+/// OAuth bodies must never be replayed to a redirect destination, even on the
+/// same host. Browser authorization redirects remain inside the system browser.
+final class PiOAuthRequestDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    static let shared = PiOAuthRequestDelegate()
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
+}
+
+enum PiAuthenticationDiagnostics {
+    private static let logger = Logger(subsystem: "com.jonwork.ios", category: "PiAuthentication")
+
+    static func phase(_ phase: String) {
+        #if DEBUG
+        logger.notice("Authentication phase: \(phase, privacy: .public)")
+        #endif
+    }
+
+    static func failure(_ error: Error, phase: String) {
+        #if DEBUG
+        let value = error as NSError
+        // Never log localized descriptions, URLs, bodies, userInfo or credentials.
+        logger.error("Authentication failure: phase=\(phase, privacy: .public), domain=\(value.domain, privacy: .public), code=\(value.code, privacy: .public)")
+        #endif
+    }
+
+    static func status(_ status: Int, phase: String) {
+        #if DEBUG
+        logger.notice("Authentication response: phase=\(phase, privacy: .public), status=\(status, privacy: .public)")
+        #endif
+    }
+}
 
 struct PiOAuthTokens: Codable, Equatable, Sendable {
     let accessToken: String
@@ -34,6 +75,9 @@ actor PiCredentialProvider {
     private let authorizer: any PiOAuthAuthorizing
     private let discovery: PiGatewayWire.Discovery
     private let profileStore: PiServerProfileStore
+    private let authorizationIsCurrent: @Sendable () -> Bool
+    private let persistCredentials: @Sendable (PiOAuthTokens) throws -> Void
+    private let removeCredentials: @Sendable () throws -> Void
     private var tokens: PiOAuthTokens?
     private var generation: UInt64 = 0
     private var refreshTask: Task<PiOAuthTokens, Error>?
@@ -44,21 +88,29 @@ actor PiCredentialProvider {
         tokens: PiOAuthTokens,
         authorizer: any PiOAuthAuthorizing,
         discovery: PiGatewayWire.Discovery,
-        profileStore: PiServerProfileStore
+        profileStore: PiServerProfileStore,
+        authorizationIsCurrent: @escaping @Sendable () -> Bool = { true },
+        persistCredentials: (@Sendable (PiOAuthTokens) throws -> Void)? = nil,
+        removeCredentials: (@Sendable () throws -> Void)? = nil
     ) {
         self.baseURL = baseURL
         self.tokens = tokens
         self.authorizer = authorizer
         self.discovery = discovery
         self.profileStore = profileStore
+        self.authorizationIsCurrent = authorizationIsCurrent
+        self.persistCredentials = persistCredentials ?? { try profileStore.save(baseURL: baseURL, oauthTokens: $0) }
+        self.removeCredentials = removeCredentials ?? { try profileStore.removeOAuthTokens(baseURL: baseURL) }
     }
 
     func accessToken() throws -> String {
+        guard authorizationIsCurrent() else { throw CancellationError() }
         guard isActive, let tokens else { throw PiServiceError.authenticationRequired }
         return tokens.accessToken
     }
 
     func refresh(rejectedAccessToken: String) async throws -> String {
+        guard authorizationIsCurrent() else { throw CancellationError() }
         guard isActive, let current = tokens else { throw PiServiceError.authenticationRequired }
         if current.accessToken != rejectedAccessToken { return current.accessToken }
         guard current.canRefresh else {
@@ -79,14 +131,14 @@ actor PiCredentialProvider {
 
         do {
             let refreshed = try await task.value
-            guard isActive, generation == refreshGeneration, !Task.isCancelled else {
+            guard isActive, generation == refreshGeneration, authorizationIsCurrent(), !Task.isCancelled else {
                 throw CancellationError()
             }
             if let tokens, tokens.accessToken != rejectedAccessToken {
                 refreshTask = nil
                 return tokens.accessToken
             }
-            try profileStore.save(baseURL: baseURL, oauthTokens: refreshed)
+            try persistCredentials(refreshed)
             tokens = refreshed
             refreshTask = nil
             return refreshed.accessToken
@@ -96,6 +148,7 @@ actor PiCredentialProvider {
         } catch let error where PiAuthenticationRecoveryPolicy.requiresFreshSignIn(after: error)
             || error as? PiServiceError == .accessDenied
         {
+            guard authorizationIsCurrent() else { throw CancellationError() }
             if generation == refreshGeneration {
                 refreshTask = nil
                 failClosed()
@@ -121,7 +174,7 @@ actor PiCredentialProvider {
         tokens = nil
         refreshTask?.cancel()
         refreshTask = nil
-        try? profileStore.removeOAuthTokens(baseURL: baseURL)
+        try? removeCredentials()
     }
 }
 
@@ -223,7 +276,7 @@ final class PiPasswordOAuthClient: PiOAuthAuthorizing, @unchecked Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await session.data(for: request, delegate: PiOAuthRequestDelegate.shared)
         } catch let error as URLError {
             throw PiService.mapTransportError(error)
         }
@@ -313,7 +366,15 @@ final class PiOAuthClient: NSObject, PiOAuthAuthorizing, ASWebAuthenticationPres
     func authorize(discovery: PiGatewayWire.Discovery, baseURL: URL) async throws -> PiOAuthTokens {
         try discovery.validate(baseURL: baseURL)
         let authorization = try PiOAuthAuthorizationRequest(authentication: discovery.authentication)
-        let callbackURL = try await startWebSession(url: authorization.url)
+        PiAuthenticationDiagnostics.phase("browser-start")
+        let callbackURL: URL
+        do {
+            callbackURL = try await startWebSession(url: authorization.url)
+        } catch {
+            PiAuthenticationDiagnostics.failure(error, phase: "browser")
+            throw error
+        }
+        PiAuthenticationDiagnostics.phase("browser-callback")
         try Task.checkCancellation()
         let code = try authorization.code(from: callbackURL)
         return try await exchange(
@@ -329,6 +390,7 @@ final class PiOAuthClient: NSObject, PiOAuthAuthorizing, ASWebAuthenticationPres
     }
 
     func refresh(_ tokens: PiOAuthTokens, discovery: PiGatewayWire.Discovery) async throws -> PiOAuthTokens {
+        try discovery.validate(baseURL: discovery.authentication.authorizationEndpoint)
         guard let refreshToken = tokens.refreshToken else { throw PiOAuthError.refreshUnavailable }
         return try await exchange(
             endpoint: discovery.authentication.tokenEndpoint,
@@ -341,6 +403,7 @@ final class PiOAuthClient: NSObject, PiOAuthAuthorizing, ASWebAuthenticationPres
     }
 
     func revoke(_ tokens: PiOAuthTokens, discovery: PiGatewayWire.Discovery) async throws {
+        try discovery.validate(baseURL: discovery.authentication.authorizationEndpoint)
         if let refreshToken = tokens.refreshToken {
             try await revoke(
                 refreshToken,
@@ -416,14 +479,17 @@ final class PiOAuthClient: NSObject, PiOAuthAuthorizing, ASWebAuthenticationPres
         request.httpBody = PiFormURLEncoder.encode(parameters)
         let data: Data
         let response: URLResponse
+        PiAuthenticationDiagnostics.phase("token-exchange")
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await session.data(for: request, delegate: PiOAuthRequestDelegate.shared)
         } catch let error as URLError {
+            PiAuthenticationDiagnostics.failure(error, phase: "token-exchange")
             throw PiService.mapTransportError(error)
         }
         guard let response = response as? HTTPURLResponse else {
             throw PiOAuthError.invalidAuthorizationResponse
         }
+        PiAuthenticationDiagnostics.status(response.statusCode, phase: "token-exchange")
         if response.statusCode == 400,
            let oauthError = try? JSONDecoder().decode(OAuthErrorResponse.self, from: data),
            oauthError.error == "invalid_grant"
@@ -477,7 +543,7 @@ final class PiOAuthClient: NSObject, PiOAuthAuthorizing, ASWebAuthenticationPres
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await session.data(for: request, delegate: PiOAuthRequestDelegate.shared)
         } catch let error as URLError {
             throw PiService.mapTransportError(error)
         }

@@ -1,0 +1,39 @@
+{
+  "contract": "jonwork-home/1.0",
+  "identity": {
+    "subject": "fixture-main-user",
+    "scopeType": "enterprise",
+    "scopeId": "fixture-enterprise",
+    "workspaceId": "fixture-workspace",
+    "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "events": [
+    {
+      "type": "error",
+      "source": "deep_research",
+      "stage": "researching",
+      "content": "Fixture research failure",
+      "metadata": {
+        "turn_terminal": true,
+        "status": "failed"
+      },
+      "session_id": "fixture-session",
+      "turn_id": "fixture-turn",
+      "seq": 1,
+      "timestamp": 4.0
+    },
+    {
+      "type": "done",
+      "source": "deep_research",
+      "stage": "",
+      "content": "",
+      "metadata": {
+        "status": "failed"
+      },
+      "session_id": "fixture-session",
+      "turn_id": "fixture-turn",
+      "seq": 2,
+      "timestamp": 4.1
+    }
+  ]
+}

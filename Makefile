@@ -66,7 +66,7 @@ endef
 	build build-ios build-ios-qa build-ios-candidate build-ios-simulator build-catalyst build-extension \
 	test test-unit test-online-e2e \
 	install-metal-toolchain package-resolve package-update scan-license \
-	localization-check localization-stale-check \
+	localization-check localization-stale-check localization-extracted-check \
 	archive archive-ios archive-macos \
 	chore clean clean-build
 
@@ -95,6 +95,7 @@ help:
 	@echo ""
 	@echo "Localization:"
 	@echo "  localization-check        Check for missing translations"
+	@echo "  localization-extracted-check Check changed app compiler-extracted keys"
 	@echo "  localization-stale-check  Prune stale keys and verify completeness"
 	@echo ""
 	@echo "Archive:"
@@ -186,6 +187,9 @@ package-update:
 
 scan-license:
 	./Resources/DevKit/scripts/scan.license.sh
+
+localization-extracted-check:
+	python3 Resources/DevKit/scripts/check_extracted_i18n.py --derived-data "$(DERIVED_DATA)" --catalog Jonwork/Resources/Localizable.xcstrings $(if $(LOCALIZATION_SOURCE_MANIFEST),--manifest "$(LOCALIZATION_SOURCE_MANIFEST)")
 
 localization-check:
 	$(call run-localization-script,$(TRANSLATION_CHECK_SCRIPT))

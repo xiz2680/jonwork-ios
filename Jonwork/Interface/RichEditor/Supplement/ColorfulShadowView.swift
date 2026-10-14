@@ -173,6 +173,11 @@ private extension ColorfulShadowView {
 
     func applyCurrentMode() {
         cancelScheduledSpeedStop()
+        if UIAccessibility.isReduceMotionEnabled {
+            gradientView.setColors(mode == .idle ? idlePalette : intelligentPalette, animated: false, repeats: false)
+            gradientView.speed = 0
+            return
+        }
         switch mode {
         case .idle:
             shadowRadius = 1.0

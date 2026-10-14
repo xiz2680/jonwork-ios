@@ -3,6 +3,7 @@ import Foundation
 import Storage
 
 extension Notification.Name {
+    static let piAuthenticationEpochDidChange = Notification.Name("PiAuthenticationEpochDidChange")
     static let piSessionDidChange = Notification.Name("PiSessionDidChange")
 }
 
@@ -111,6 +112,8 @@ final class PiSessionCoordinator {
     private let reconnectDelay: (Int) async throws -> Void
     private let renderOverride: ((Conversation.ID, PiConversationState) -> Void)?
     private var bindings: [Conversation.ID: Binding]
+    private let textDrafts = PiTextDraftStore()
+    private let nativePreferences: PiConversationPreferences
     private var reducers: [Conversation.ID: PiSessionReducer] = [:]
     private var adapters: [Conversation.ID: PiEventAdapter] = [:]
     private var discoveries: [Conversation.ID: PiGatewayWire.Discovery] = [:]
@@ -138,6 +141,22 @@ final class PiSessionCoordinator {
     private var activeConversationID: Conversation.ID?
     private var authenticatedServiceBaseURL: URL?
     private var authenticatedServiceFactory: (() throws -> any PiServiceProtocol)?
+    private final class WeakCredentialProvider {
+        weak var value: PiCredentialProvider?
+        init(_ value: PiCredentialProvider) { self.value = value }
+    }
+
+    private var accountCredentialProviders: [WeakCredentialProvider] = []
+    nonisolated let authenticationFence = PiAuthenticationEpochFence()
+    lazy var homeAuthenticationAuthority = HomeAuthenticationAuthority(preferences: nativePreferences)
+    var authenticationEpoch: UInt64 { authenticationFence.current }
+
+    func beginAuthenticationEpoch() -> UInt64 {
+        let epoch = authenticationFence.advance()
+        DisposableExporter.cancelAll()
+        NotificationCenter.default.post(name: .piAuthenticationEpochDidChange, object: self)
+        return epoch
+    }
 
     init(
         defaults: UserDefaults = .standard,
@@ -152,6 +171,7 @@ final class PiSessionCoordinator {
     ) {
         let profileStore = PiServerProfileStore(defaults: defaults)
         self.defaults = defaults
+        nativePreferences = PiConversationPreferences(defaults: defaults)
         self.profileProvider = profileProvider ?? { try profileStore.load() }
         self.serviceFactory = serviceFactory ?? { profile in
             try PiService(configuration: .init(baseURL: profile.baseURL, token: profile.token))
@@ -173,6 +193,60 @@ final class PiSessionCoordinator {
     func binding(for conversationID: Conversation.ID?) -> Binding? {
         guard let conversationID else { return nil }
         return bindings[conversationID]
+    }
+
+    func textDraft(for conversationID: Conversation.ID) -> String {
+        guard let binding = bindings[conversationID] else { return "" }
+        return textDrafts.text(binding: binding)
+    }
+
+    func saveTextDraft(_ text: String, conversationID: Conversation.ID) {
+        guard let binding = bindings[conversationID] else { return }
+        textDrafts.save(text, binding: binding)
+    }
+
+    func nativeFlags(for conversationID: Conversation.ID) -> PiConversationPreferences.Flags {
+        guard let binding = bindings[conversationID] else { return .init() }
+        return nativePreferences.flags(for: binding)
+    }
+
+    func saveNativeFlags(_ flags: PiConversationPreferences.Flags, conversationID: Conversation.ID) {
+        guard let binding = bindings[conversationID] else { return }
+        nativePreferences.save(flags, binding: binding)
+        notify(conversationID)
+    }
+
+    func defaultConfiguration(for conversationID: Conversation.ID) -> PiConversationPreferences.Configuration? {
+        guard let binding = bindings[conversationID], let value = nativePreferences.configuration(for: binding),
+              let model = models(conversationID: conversationID).first(where: { $0.provider == value.provider && $0.id == value.modelID }),
+              (model.thinkingLevels.contains(value.thinkingLevel) || (model.thinkingLevels.isEmpty && value.thinkingLevel == .off))
+        else { return nil }
+        return value
+    }
+
+    func saveDefaultConfiguration(_ value: PiConversationPreferences.Configuration, conversationID: Conversation.ID) throws {
+        guard let binding = bindings[conversationID], viewState(for: conversationID)?.connection == .connected,
+              let model = models(conversationID: conversationID).first(where: { $0.provider == value.provider && $0.id == value.modelID }),
+              (model.thinkingLevels.contains(value.thinkingLevel) || (model.thinkingLevels.isEmpty && value.thinkingLevel == .off))
+        else { throw PiCoordinatorError.capabilityUnavailable }
+        nativePreferences.save(value, binding: binding)
+        notify(conversationID)
+    }
+
+    func applyDefaultConfiguration(to conversationID: Conversation.ID) async throws {
+        guard let binding = bindings[conversationID], let configuration = nativePreferences.configuration(for: binding) else { return }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+        while viewState(for: conversationID)?.connection != .connected {
+            guard bindings[conversationID] == binding else { throw CancellationError() }
+            guard ContinuousClock.now < deadline else { throw PiServiceError.timedOut }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        guard defaultConfiguration(for: conversationID) == configuration else { throw PiCoordinatorError.capabilityUnavailable }
+        try await setModel(provider: configuration.provider, modelID: configuration.modelID, conversationID: conversationID)
+        guard bindings[conversationID] == binding else { throw CancellationError() }
+        if selectedModel(conversationID: conversationID)?.thinkingLevels.isEmpty == false {
+            try await setThinkingLevel(configuration.thinkingLevel, conversationID: conversationID)
+        }
     }
 
     func viewState(for conversationID: Conversation.ID?) -> ViewState? {
@@ -250,15 +324,20 @@ final class PiSessionCoordinator {
         } catch {}
         lastMutationReceipts[conversationID] = nil
         phases[conversationID] = nil
+        if let binding = bindings[conversationID] { textDrafts.remove(binding: binding) }
         bindings[conversationID] = nil
         if activeConversationID == conversationID { activeConversationID = nil }
         persistBindings()
+        notify(conversationID)
     }
 
     func unbindAll() {
+        let formerIDs = Array(bindings.keys)
         for conversationID in Array(eventTasks.keys) {
             cancelConnection(conversationID)
         }
+        for conversationID in formerIDs { clearProjection(conversationID) }
+        textDrafts.removeAll()
         bindings.removeAll()
         reducers.removeAll()
         adapters.removeAll()
@@ -279,24 +358,43 @@ final class PiSessionCoordinator {
         migratedConversations.removeAll()
         activeConversationID = nil
         persistBindings()
+        for conversationID in formerIDs { notify(conversationID) }
     }
 
-    func revokeAllCredentialsAndState() async {
+    func revokeAllCredentialsAndState(advancingAuthenticationEpoch: Bool = true) async {
+        await prepareCredentialRevocation(advancingAuthenticationEpoch: advancingAuthenticationEpoch)()
+    }
+
+    func prepareCredentialRevocation(advancingAuthenticationEpoch: Bool = true, preservingHomePreferences: Bool = false) -> @MainActor () async -> Void {
+        if advancingAuthenticationEpoch { _ = beginAuthenticationEpoch() }
+        if preservingHomePreferences { nativePreferences.removePiPreferences() } else { nativePreferences.removeAll() }
+        DisposableExporter.cancelAll()
+        let formerConversationIDs = Array(bindings.keys)
         let activeServices = Array(services.values)
+        let credentialProviders = accountCredentialProviders.compactMap(\.value)
+        accountCredentialProviders.removeAll()
         authenticatedServiceBaseURL = nil
         authenticatedServiceFactory = nil
         unbindAll()
+        if renderOverride == nil {
+            for id in formerConversationIDs { ConversationManager.shared.deleteConversation(identifier: id) }
+        }
         pendingAttachmentBatches.removeAll()
         try? pendingMutationStore.saveAttachmentUploads([:])
-        for service in activeServices {
-            await service.cancelAllRequests()
+        return {
+            // The epoch already rejects late refresh saves before these awaits.
+            for provider in credentialProviders { await provider.invalidate() }
+            for service in activeServices { await service.cancelAllRequests() }
         }
     }
 
     func installAuthenticatedServiceFactory(
         baseURL: URL,
+        credentialProvider: PiCredentialProvider? = nil,
         factory: @escaping () throws -> any PiServiceProtocol
     ) {
+        accountCredentialProviders.removeAll { $0.value == nil }
+        if let credentialProvider { accountCredentialProviders.append(WeakCredentialProvider(credentialProvider)) }
         authenticatedServiceBaseURL = baseURL
         authenticatedServiceFactory = factory
     }
@@ -528,8 +626,10 @@ final class PiSessionCoordinator {
         try await performMutation(.setThinkingLevel(level), conversationID: conversationID)
     }
 
-    func compact(instructions: String?, conversationID: Conversation.ID) async throws {
-        try await performMutation(.compact(instructions: instructions), conversationID: conversationID)
+    func compact(instructions: String? = nil, conversationID: Conversation.ID, sharingAuthorization: PiSharingConsent.Fence? = nil) async throws {
+        let context = try commandContext(conversationID)
+        guard !context.state.isStreaming else { throw PiCoordinatorError.streaming }
+        try await performMutation(.compact(instructions: instructions), conversationID: conversationID, sharingAuthorization: sharingAuthorization)
     }
 
     func takeOver(conversationID: Conversation.ID) async throws {
@@ -624,12 +724,16 @@ final class PiSessionCoordinator {
         try validateSharing(sharingAuthorization, conversationID: conversationID)
         guard !pendingMutationStoreLoadFailed else { throw PiServiceError.invalidResponse }
         guard mutationsInFlight.insert(conversationID).inserted else { throw PiCoordinatorError.mutationInFlight }
+        let mutationBinding = bindings[conversationID]
+        let mutationGeneration = generations[conversationID]
         pendingActions[conversationID] = action == .takeOver ? .takeover : .other
         notify(conversationID)
         defer {
-            mutationsInFlight.remove(conversationID)
-            pendingActions[conversationID] = nil
-            notify(conversationID)
+            if bindings[conversationID] == mutationBinding, generations[conversationID] == mutationGeneration {
+                mutationsInFlight.remove(conversationID)
+                pendingActions[conversationID] = nil
+                notify(conversationID)
+            }
         }
         let context = try commandContext(conversationID)
         switch action {
@@ -703,6 +807,9 @@ final class PiSessionCoordinator {
             let recorded = try recordReceipt(receipt, pending: pending, conversationID: conversationID)
             try await accept(receipt, pending: recorded, conversationID: conversationID, service: context.service)
         } catch {
+            guard bindings[conversationID] == mutationBinding, generations[conversationID] == mutationGeneration else {
+                throw CancellationError()
+            }
             let retained = pendingMutations[conversationID] ?? pending
             if retained.receipt != nil {
                 throw error
@@ -775,6 +882,10 @@ final class PiSessionCoordinator {
         pending: PiPendingMutationRecord,
         conversationID: Conversation.ID
     ) throws -> PiPendingMutationRecord {
+        guard bindings[conversationID]?.sessionID == pending.sessionID,
+              bindings[conversationID]?.clientID == pending.clientID,
+              pendingMutations[conversationID]?.context.idempotencyKey == pending.context.idempotencyKey
+        else { throw CancellationError() }
         let recorded = PiPendingMutationRecord(
             sessionID: pending.sessionID,
             clientID: pending.clientID,
@@ -796,6 +907,11 @@ final class PiSessionCoordinator {
         conversationID: Conversation.ID,
         service: any PiServiceProtocol
     ) async throws {
+        guard let binding = bindings[conversationID],
+              binding.sessionID == pending.sessionID, binding.clientID == pending.clientID,
+              pendingMutations[conversationID]?.context.idempotencyKey == pending.context.idempotencyKey
+        else { throw CancellationError() }
+        let generation = generations[conversationID]
         guard receipt.status == .applied,
               receipt.sessionId == pending.sessionID,
               (200 ..< 300).contains(receipt.responseStatus)
@@ -810,10 +926,19 @@ final class PiSessionCoordinator {
             )
         }
         let snapshot = try await service.snapshot(sessionID: pending.sessionID)
+        guard bindings[conversationID] == binding, generations[conversationID] == generation,
+              pendingMutations[conversationID]?.context.idempotencyKey == pending.context.idempotencyKey
+        else { throw CancellationError() }
         guard snapshot.sessionId == pending.sessionID,
               snapshot.revision >= receipt.revision,
+              snapshot.revision >= (reducers[conversationID]?.state.revision ?? 0),
               pending.action.matchesAuthoritativeConfiguration(snapshot.configuration)
         else { throw PiServiceError.invalidResponse }
+        if let cursor = adapters[conversationID]?.lastEventID {
+            guard try PiGatewayWire.EventID(snapshot.lastEventId) >= cursor else {
+                throw PiServiceError.invalidResponse
+            }
+        }
         guard let discovery = discoveries[conversationID] else {
             throw PiServiceError.capabilityUnavailable(["discovery"])
         }
@@ -846,12 +971,15 @@ final class PiSessionCoordinator {
         operationID: String,
         conversationID: Conversation.ID
     ) async throws {
+        guard let binding = bindings[conversationID] else { throw CancellationError() }
+        let generation = generations[conversationID]
         guard let timeout = discoveries[conversationID]?.limits.mutationTimeoutMs else {
             throw PiCoordinatorError.notConnected
         }
         let deadline = ContinuousClock.now + .milliseconds(timeout)
         while ContinuousClock.now < deadline {
             try Task.checkCancellation()
+            guard bindings[conversationID] == binding, generations[conversationID] == generation else { throw CancellationError() }
             if let settlement = operationSettlements[conversationID]?[operationID] {
                 guard settlement.status == "completed" else {
                     try clearPendingMutation(conversationID)
@@ -1275,6 +1403,13 @@ final class PiSessionCoordinator {
         remoteMessageIndex[conversationID] = nil
         projectedMessages[conversationID] = nil
         migratedConversations.remove(conversationID)
+        if renderOverride == nil {
+            let session = ConversationSessionManager.shared.session(for: conversationID)
+            for message in session.messages where session.isTransientMessage(message.objectId) {
+                session.discardTransientMessage(messageIdentifier: message.objectId)
+            }
+            session.notifyMessagesDidChange(scrolling: false)
+        }
     }
 
     private func notify(_ conversationID: Conversation.ID) {

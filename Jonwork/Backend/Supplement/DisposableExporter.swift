@@ -10,6 +10,11 @@ final class DisposableExporter: NSObject {
     @MainActor
     private static var activeExporters: [UUID: DisposableExporter] = [:]
 
+    @MainActor
+    static func cancelAll() {
+        for exporter in Array(activeExporters.values) { exporter.cleanup() }
+    }
+
     private let identifier = UUID()
     private let deletableItem: URL
     private let title: String?
@@ -41,8 +46,9 @@ final class DisposableExporter: NSObject {
         self.init(deletableItem: tempURL, title: title)
     }
 
-    func run(anchor toView: UIView, mode: RunMode = .file) {
+    func run(anchor toView: UIView, mode: RunMode = .file, authorization: (@MainActor () -> Bool)? = nil) {
         Task { @MainActor in
+            guard authorization?() != false else { self.cleanup(); return }
             self.runMainActor(anchor: toView, mode: mode)
         }
     }

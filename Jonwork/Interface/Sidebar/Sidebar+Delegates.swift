@@ -17,12 +17,18 @@ extension Sidebar: NewChatButton.Delegate {
 
 extension Sidebar: SearchControllerOpenButton.Delegate {
     func searchButtonDidTap() {
+        guard let presenter = parentViewController, presenter.presentedViewController == nil, !presenter.isBeingDismissed else { return }
+        guard JonworkSurfacePolicy.allowsLegacyConversations else {
+            presenter.present(SettingController.makeJonworkWorkspaceController(startsSearching: true), animated: true)
+            return
+        }
+
         let controller = ConversationSearchController { conversationId in
             Logger.ui.debugFile("Search callback called with conversationId: \(conversationId ?? "nil")")
             guard let conversationId else { return }
             Logger.ui.debugFile("Setting chat selection to: \(conversationId)")
             ChatSelection.shared.select(conversationId)
         }
-        parentViewController?.present(controller, animated: true)
+        presenter.present(controller, animated: true)
     }
 }

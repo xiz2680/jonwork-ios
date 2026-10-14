@@ -112,7 +112,7 @@ class RichEditorView: EditorSectionView {
 
     weak var delegate: Delegate?
     var objectTransactionInProgress = false
-    private var isJonworkConversation = false
+    private(set) var isJonworkConversation = false
     var jonworkAttachmentMaximumBytes: Int?
     var jonworkAllowsImageAttachments = true
     var jonworkAllowsFileAttachments = true
@@ -292,6 +292,7 @@ class RichEditorView: EditorSectionView {
     }
 
     func prepareForReuse() {
+        if isJonworkConversation { storage.removeAll() }
         storage = .init(id: "-1")
         resetValues()
         updateModelName()
@@ -332,6 +333,14 @@ class RichEditorView: EditorSectionView {
             || jonworkAttachmentMediaTypes != attachmentMediaTypes
         guard configurationChanged else { return }
         isJonworkConversation = enabled
+        inputEditor.usesJonworkLayout = enabled
+        #if targetEnvironment(macCatalyst)
+            inputEditor.bossButton.change(icon: enabled ? "plus" : "attachment", animated: false)
+            inputEditor.bossButton.accessibilityLabel = String(localized: "Add Attachment")
+        #else
+            inputEditor.bossButton.change(icon: enabled ? "plus" : "camera", animated: false)
+            inputEditor.bossButton.accessibilityLabel = String(localized: enabled ? "Add Attachment" : "Open Camera")
+        #endif
         jonworkAttachmentMaximumBytes = enabled ? attachmentMaximumBytes : nil
         jonworkAllowsImageAttachments = !enabled || allowsImageAttachments
         jonworkAllowsFileAttachments = !enabled || allowsFileAttachments

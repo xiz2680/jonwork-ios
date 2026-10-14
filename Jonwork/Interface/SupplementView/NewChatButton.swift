@@ -35,8 +35,19 @@ class NewChatButton: UIButton {
     }
 
     weak var delegate: Delegate?
+    var makeJonworkController: () -> UIViewController = {
+        SettingController.makeJonworkWorkspaceController(startsNewConversation: true)
+    }
 
     private func updateMenu() {
+        if !JonworkSurfacePolicy.allowsLegacyConversations {
+            showsMenuAsPrimaryAction = false
+            removeTarget(nil, action: nil, for: .touchUpInside)
+            addTarget(self, action: #selector(createJonworkConversation), for: .touchUpInside)
+            menu = nil
+            return
+        }
+
         #if DEBUG
             let templates = ChatTemplateManager.shared.templates
 
@@ -58,6 +69,11 @@ class NewChatButton: UIButton {
             addTarget(self, action: #selector(showUnavailable), for: .touchUpInside)
             menu = nil
         #endif
+    }
+
+    @objc private func createJonworkConversation() {
+        guard let presenter = parentViewController, presenter.presentedViewController == nil, !presenter.isBeingDismissed else { return }
+        presenter.present(makeJonworkController(), animated: true)
     }
 
     @objc private func createNewConversation() {

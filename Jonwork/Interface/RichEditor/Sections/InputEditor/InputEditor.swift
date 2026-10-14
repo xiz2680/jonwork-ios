@@ -9,7 +9,7 @@ import Combine
 import UIKit
 
 class InputEditor: EditorSectionView {
-    let font = UIFont.preferredFont(forTextStyle: .body)
+    var font = UIFont.preferredFont(forTextStyle: .body)
     let textHeight: CurrentValueSubject<CGFloat, Never> = .init(0)
     let maxTextEditorHeight: CGFloat = 200
 
@@ -29,6 +29,20 @@ class InputEditor: EditorSectionView {
     let inset: UIEdgeInsets = .init(top: 10, left: 10, bottom: 10, right: 10)
     let iconSpacing: CGFloat = 10
     let iconSize = CGSize(width: 30, height: 30)
+
+    var usesJonworkLayout = false
+    var onJonworkStop: (() -> Void)?
+    var isJonworkStreaming = false {
+        didSet {
+            guard oldValue != isJonworkStreaming else { return }
+            sendButton.change(icon: isJonworkStreaming ? "stop.fill" : "arrow.up.circle.fill")
+            sendButton.accessibilityLabel = String(localized: isJonworkStreaming ? "Stop Response" : "Send")
+            doWithAnimation { self.setNeedsLayout() }
+        }
+    }
+    var hasAttachments = false {
+        didSet { if oldValue != hasAttachments { setNeedsLayout() } }
+    }
 
     var isControlPanelOpened: Bool = false {
         didSet { moreButton.change(icon: isControlPanelOpened ? "x.circle" : "plus.circle") }
@@ -86,6 +100,13 @@ class InputEditor: EditorSectionView {
         elementClipper.clipsToBounds = true
         elementClipper.addSubview(bossButton)
         textView.font = font
+        textView.adjustsFontForContentSizeCategory = true
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (view: InputEditor, _: UITraitCollection) in
+            view.font = .preferredFont(forTextStyle: .body)
+            view.textView.font = view.font
+            view.placeholderLabel.font = view.font
+            view.setNeedsLayout()
+        }
         textView.delegate = self
         textView.showsVerticalScrollIndicator = false
         textView.showsHorizontalScrollIndicator = false
@@ -132,6 +153,10 @@ class InputEditor: EditorSectionView {
         }
         elementClipper.addSubview(moreButton)
         sendButton.tapAction = { [weak self] in
+            if self?.usesJonworkLayout == true, self?.isJonworkStreaming == true {
+                self?.onJonworkStop?()
+                return
+            }
             self?.delegate?.onInputEditorSubmitButtonTapped()
         }
         elementClipper.addSubview(sendButton)
@@ -154,6 +179,12 @@ class InputEditor: EditorSectionView {
         super.layoutSubviews()
 
         elementClipper.frame = bounds
+
+        if usesJonworkLayout {
+            layoutAsJonwork()
+            updatePlaceholderAlpha()
+            return
+        }
 
         switch layoutStatus {
         case .standard:

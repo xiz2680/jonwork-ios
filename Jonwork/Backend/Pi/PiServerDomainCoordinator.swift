@@ -1,3 +1,4 @@
+import AuthenticationServices
 import CryptoKit
 import Foundation
 import Storage
@@ -95,12 +96,14 @@ final class PiServerDomainCoordinator {
     private let pendingMutationStore: any PiPendingMutationStoring
     private let serviceFactory: (PiServerProfile) throws -> any PiServiceProtocol
     private var service: (any PiServiceProtocol)?
+    private let revocationAuthorizer: any PiOAuthAuthorizing
     private var oauthContext: (authorizer: any PiOAuthAuthorizing, discovery: PiGatewayWire.Discovery)?
     private var pendingCreation: PiPendingCreationRecord?
     private var pendingCreationStoreLoadFailed = false
     private var discovery: PiGatewayWire.Discovery?
     private var creationInFlight = false
     private var authenticationGeneration: UInt64 = 0
+    private var sharedAuthenticationEpoch: UInt64?
     private var authenticationTask: Task<PiServerPresentation, Error>?
     private var credentialProvider: PiCredentialProvider?
     private var authenticatedServiceFactory: (() throws -> any PiServiceProtocol)?
@@ -110,11 +113,13 @@ final class PiServerDomainCoordinator {
         profileStore: PiServerProfileStore = .init(),
         sessionCoordinator: PiSessionCoordinator? = nil,
         pendingMutationStore: any PiPendingMutationStoring = PiPendingMutationStore(),
+        revocationAuthorizer: (any PiOAuthAuthorizing)? = nil,
         serviceFactory: @escaping (PiServerProfile) throws -> any PiServiceProtocol = {
             try PiService(configuration: .init(baseURL: $0.baseURL, token: $0.token))
         }
     ) {
         self.profileStore = profileStore
+        self.revocationAuthorizer = revocationAuthorizer ?? PiPasswordOAuthClient()
         self.sessionCoordinator = sessionCoordinator ?? .shared
         self.pendingMutationStore = pendingMutationStore
         self.serviceFactory = serviceFactory
@@ -129,12 +134,20 @@ final class PiServerDomainCoordinator {
     func savedProfile() throws -> PiServerProfile? { try profileStore.load() }
     func hasSavedCredentials() throws -> Bool { try profileStore.hasSavedToken() }
 
+
     func connect(baseURL: URL, accessToken: String) async throws -> PiServerPresentation {
-        try await connectAuthenticated(baseURL: baseURL, accessToken: accessToken, persistLegacyToken: true)
+        authenticationGeneration &+= 1
+        let generation = authenticationGeneration
+        sharedAuthenticationEpoch = sessionCoordinator.beginAuthenticationEpoch()
+        if try profileStore.load() != PiServerProfile(baseURL: baseURL, token: accessToken) {
+            try await purgePreviousAuthenticatedState(generation: generation)
+        }
+        return try await connectAuthenticated(baseURL: baseURL, accessToken: accessToken, persistLegacyToken: true, authenticationGeneration: generation)
     }
 
     func authenticate(baseURL: URL, authorizer: any PiOAuthAuthorizing) async throws -> PiServerPresentation {
         authenticationGeneration &+= 1
+        sharedAuthenticationEpoch = sessionCoordinator.beginAuthenticationEpoch()
         let generation = authenticationGeneration
         authenticationTask?.cancel()
         let task = Task { @MainActor [weak self] in
@@ -162,9 +175,11 @@ final class PiServerDomainCoordinator {
         generation: UInt64
     ) async throws -> PiServerPresentation {
         let discoveryService = try serviceFactory(.init(baseURL: baseURL, token: nil))
+        PiAuthenticationDiagnostics.phase("discovery")
         let discovery = try await discoveryService.discover()
         try validateAuthentication(generation)
         try discovery.validate(baseURL: baseURL)
+        PiAuthenticationDiagnostics.phase("discovery-validated")
         let stored = try profileStore.oauthTokens(baseURL: baseURL)
         let tokens = try await resolveTokens(
             stored: stored,
@@ -195,6 +210,7 @@ final class PiServerDomainCoordinator {
             try profileStore.removeOAuthTokens(baseURL: baseURL)
             let replacement = try await authorizer.authorize(discovery: discovery, baseURL: baseURL)
             try validateAuthentication(generation)
+            try await purgePreviousAuthenticatedState(generation: generation)
             try profileStore.save(baseURL: baseURL, oauthTokens: replacement)
             try await configureAuthenticatedServices(
                 baseURL: baseURL,
@@ -232,11 +248,13 @@ final class PiServerDomainCoordinator {
                 try profileStore.removeOAuthTokens(baseURL: baseURL)
                 let replacement = try await authorizer.authorize(discovery: discovery, baseURL: baseURL)
                 try validateAuthentication(generation)
+                try await purgePreviousAuthenticatedState(generation: generation)
                 return replacement
             }
         }
         let authorized = try await authorizer.authorize(discovery: discovery, baseURL: baseURL)
         try validateAuthentication(generation)
+        try await purgePreviousAuthenticatedState(generation: generation)
         return authorized
     }
 
@@ -453,14 +471,27 @@ final class PiServerDomainCoordinator {
         return presentation
     }
 
-    func signOut() async throws {
+    func signOut(preservingHomePreferences: Bool = false) async throws {
+        try await prepareSignOut(preservingHomePreferences: preservingHomePreferences)()
+    }
+
+    /// Prepare both namespaces before any remote operation can suspend.
+    func signOut(homeClient: HomeGatewayClient, anchor: @escaping () -> ASPresentationAnchor) async throws {
+        let piRevocation = prepareSignOut()
+        let homeRevocation = homeClient.prepareSignOut(anchor: anchor)
+        var failure: Error?
+        do { try await piRevocation() } catch { failure = error }
+        do { try await homeRevocation() } catch { if failure == nil { failure = error } }
+        if let failure { throw failure }
+    }
+
+    private func prepareSignOut(preservingHomePreferences: Bool = false) -> @MainActor () async throws -> Void {
         PiSharingConsent.shared.revokeAll()
         authenticationGeneration &+= 1
         let credentialProvider = credentialProvider
         self.credentialProvider = nil
         authenticatedServiceFactory = nil
         sessionCoordinator.clearAuthenticatedServiceFactory()
-        await credentialProvider?.invalidate()
         let authenticationTask = authenticationTask
         self.authenticationTask = nil
         authenticationTask?.cancel()
@@ -489,19 +520,48 @@ final class PiServerDomainCoordinator {
         }
         creationInFlight = false
         presentation = .init()
-        await activeService?.cancelAllRequests()
-        await sessionCoordinator.revokeAllCredentialsAndState()
-        var revocationError: Error?
-        if let tokens, let oauthContext {
-            do {
-                try await oauthContext.authorizer.revoke(tokens, discovery: oauthContext.discovery)
-            } catch {
-                revocationError = error
+        let clearProviders = sessionCoordinator.prepareCredentialRevocation(preservingHomePreferences: preservingHomePreferences)
+        do { try profileStore.removeSavedToken() } catch { if pendingCleanupError == nil { pendingCleanupError = error } }
+        let cleanupError = pendingCleanupError
+        return { [self] in
+            await credentialProvider?.invalidate()
+            await activeService?.cancelAllRequests()
+            await clearProviders()
+            var revocationError: Error?
+            if let tokens {
+                do {
+                    if let oauthContext {
+                        try await oauthContext.authorizer.revoke(tokens, discovery: oauthContext.discovery)
+                    } else if let profile {
+                        // A fresh account menu may never have connected. Discover without
+                        // opening sign-in UI, and never send saved tokens to another origin.
+                        let discoveryService = try serviceFactory(.init(baseURL: profile.baseURL, token: nil))
+                        do {
+                            let discovered = try await discoveryService.discover()
+                            try discovered.validate(baseURL: profile.baseURL)
+                            guard Self.sameOrigin(discovered.authentication.revocationEndpoint, profile.baseURL) else {
+                                throw PiServiceError.unsupportedAuthentication
+                            }
+                            try await revocationAuthorizer.revoke(tokens, discovery: discovered)
+                            await discoveryService.cancelAllRequests()
+                        } catch {
+                            await discoveryService.cancelAllRequests()
+                            throw error
+                        }
+                    }
+                } catch {
+                    revocationError = error
+                }
             }
+            if let revocationError { throw revocationError }
+            if let cleanupError { throw cleanupError }
         }
-        try profileStore.removeSavedToken()
-        if let revocationError { throw revocationError }
-        if let pendingCleanupError { throw pendingCleanupError }
+    }
+
+    private static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
+        func port(_ url: URL) -> Int? { url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80) }
+        return lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
+            && lhs.host?.lowercased() == rhs.host?.lowercased() && port(lhs) == port(rhs)
     }
 
     private func configureAuthenticatedServices(
@@ -514,12 +574,22 @@ final class PiServerDomainCoordinator {
         try validateAuthentication(generation)
         await credentialProvider?.invalidate()
         try validateAuthentication(generation)
+        let fence = sessionCoordinator.authenticationFence
+        guard let epoch = sharedAuthenticationEpoch else { throw CancellationError() }
+        let profileStore = profileStore
         let provider = PiCredentialProvider(
             baseURL: baseURL,
             tokens: tokens,
             authorizer: authorizer,
             discovery: discovery,
-            profileStore: profileStore
+            profileStore: profileStore,
+            authorizationIsCurrent: { fence.isCurrent(epoch) },
+            persistCredentials: { value in
+                try fence.perform(epoch: epoch) { try profileStore.save(baseURL: baseURL, oauthTokens: value) }
+            },
+            removeCredentials: {
+                try fence.perform(epoch: epoch) { try profileStore.removeOAuthTokens(baseURL: baseURL) }
+            }
         )
         let serviceFactory = serviceFactory
         let factory = {
@@ -530,13 +600,15 @@ final class PiServerDomainCoordinator {
                 credentialProvider: provider,
                 serviceFactory: serviceFactory,
                 authenticationFailure: { @MainActor [weak self] in
-                    await self?.failClosedAuthentication()
+                    guard let self, self.authenticationGeneration == generation,
+                          self.sharedAuthenticationEpoch == self.sessionCoordinator.authenticationEpoch else { return }
+                    await self.failClosedAuthentication()
                 }
             )
         }
         credentialProvider = provider
         authenticatedServiceFactory = factory
-        sessionCoordinator.installAuthenticatedServiceFactory(baseURL: baseURL, factory: factory)
+        sessionCoordinator.installAuthenticatedServiceFactory(baseURL: baseURL, credentialProvider: provider, factory: factory)
     }
 
     private func failClosedAuthentication() async {
@@ -556,9 +628,18 @@ final class PiServerDomainCoordinator {
     }
 
     private func validateAuthentication(_ generation: UInt64) throws {
-        guard generation == authenticationGeneration, !Task.isCancelled else {
+        guard generation == authenticationGeneration,
+              sharedAuthenticationEpoch == sessionCoordinator.authenticationEpoch,
+              !Task.isCancelled else {
             throw CancellationError()
         }
+    }
+
+    private func purgePreviousAuthenticatedState(generation: UInt64) async throws {
+        try validateAuthentication(generation)
+        await sessionCoordinator.revokeAllCredentialsAndState(advancingAuthenticationEpoch: false)
+        try validateAuthentication(generation)
+        sharedAuthenticationEpoch = sessionCoordinator.beginAuthenticationEpoch()
     }
 
     private func resolveAmbiguousRestore(

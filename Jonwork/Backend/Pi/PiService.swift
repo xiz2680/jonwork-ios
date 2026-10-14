@@ -346,7 +346,7 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
         return try await withThrowingTaskGroup(
             of: (URLSession.AsyncBytes, URLResponse).self
         ) { group in
-            group.addTask { try await session.bytes(for: request) }
+            group.addTask { try await session.bytes(for: request, delegate: PiOAuthRequestDelegate.shared) }
             group.addTask {
                 try await Task.sleep(nanoseconds: nanoseconds.partialValue)
                 throw PiServiceError.timedOut
@@ -530,7 +530,7 @@ final class PiService: PiServiceProtocol, @unchecked Sendable {
         for request: URLRequest,
         maximumBodyBytes: Int
     ) async throws -> (Data, URLResponse) {
-        let (bytes, response) = try await session.bytes(for: request)
+        let (bytes, response) = try await session.bytes(for: request, delegate: PiOAuthRequestDelegate.shared)
         let declaredLength = response.expectedContentLength
         guard declaredLength < 0
                 || declaredLength <= Int64(maximumBodyBytes)

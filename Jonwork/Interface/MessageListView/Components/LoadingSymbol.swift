@@ -34,6 +34,7 @@ final class LoadingSymbol: UIView {
         super.init(frame: frame)
 
         backgroundColor = .clear
+        NotificationCenter.default.addObserver(self, selector: #selector(updateMotion), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
     }
 
     @available(*, unavailable)
@@ -43,14 +44,21 @@ final class LoadingSymbol: UIView {
 
     override func didMoveToSuperview() {
         super.didMoveToSuperview()
+        updateMotion()
+    }
 
-        if superview != nil {
+    @objc private func updateMotion() {
+        displayLink?.invalidate()
+        displayLink = nil
+        if superview != nil && !UIAccessibility.isReduceMotionEnabled {
             displayLink = CADisplayLink(target: self, selector: #selector(handleDisplayLink(_:)))
             displayLink?.add(to: .main, forMode: .common)
             target = 1
         } else {
             displayLink?.invalidate()
             displayLink = nil
+            values = .init(repeating: 0.5, count: 3)
+            setNeedsDisplay()
         }
     }
 

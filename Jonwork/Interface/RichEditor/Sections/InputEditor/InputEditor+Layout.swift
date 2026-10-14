@@ -8,6 +8,30 @@
 import UIKit
 
 extension InputEditor {
+    func layoutAsJonwork() {
+        let iconSize = CGSize(width: 44, height: 44)
+        let canSend = isJonworkStreaming || hasAttachments || !(textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let bottom = bounds.height - inset.bottom - iconSize.height
+        bossButton.frame = .init(x: inset.left, y: bottom, width: iconSize.width, height: iconSize.height)
+        bossButton.alpha = 1
+        bossButton.transform = .identity
+        moreButton.alpha = 0
+        let actionFrame = CGRect(x: bounds.width - inset.right - iconSize.width, y: bottom,
+                                 width: iconSize.width, height: iconSize.height)
+        sendButton.frame = actionFrame
+        sendButton.alpha = canSend ? 1 : 0
+        sendButton.transform = .identity
+        voiceButton.frame = actionFrame.offsetBy(dx: canSend ? -(iconSize.width + iconSpacing) : 0, dy: 0)
+        voiceButton.alpha = 1
+        voiceButton.transform = .identity
+        let textLeft = bossButton.isHidden ? inset.left : bossButton.frame.maxX + iconSpacing
+        let height = textLayoutHeight(textHeight.value)
+        textView.frame = .init(x: textLeft, y: (bounds.height - height) / 2,
+                              width: max(0, voiceButton.frame.minX - textLeft - iconSpacing), height: height)
+        textView.alpha = 1
+        placeholderLabel.frame = textView.frame
+    }
+
     func textLayoutHeight(_ input: CGFloat) -> CGFloat {
         var finalHeight = input
         finalHeight = max(font.lineHeight, finalHeight)

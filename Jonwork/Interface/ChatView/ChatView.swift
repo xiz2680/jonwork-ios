@@ -23,7 +23,7 @@ final class JonworkUnavailableView: UIView {
     }
 
     let detailLabel = UILabel().with {
-        $0.text = String(localized: "Jonwork sign-in is not available in this build. No local conversation was created.")
+        $0.text = String(localized: "Choose an available conversation from your workspace.")
         $0.font = .preferredFont(forTextStyle: .body)
         $0.adjustsFontForContentSizeCategory = true
         $0.textAlignment = .center
@@ -147,6 +147,11 @@ class ChatView: UIView {
         piStatusView.onStop = { [weak self] in
             guard let self, let conversationIdentifier else { return }
             Task { await self.performPiAction { try await PiSessionCoordinator.shared.abort(conversationID: conversationIdentifier) } }
+        }
+        editor.inputEditor.onJonworkStop = piStatusView.onStop
+        piStatusView.onNewConversation = { [weak self] in
+            guard let presenter = self?.parentViewController, presenter.presentedViewController == nil else { return }
+            presenter.present(SettingController.makeJonworkWorkspaceController(startsNewConversation: true), animated: true)
         }
 
         editor.handlerColor = handlerColor
@@ -385,14 +390,17 @@ class ChatView: UIView {
         guard let conversationIdentifier,
               PiSessionCoordinator.shared.binding(for: conversationIdentifier) != nil
         else {
-            #if DEBUG
+            if allowsLegacyConversations && !editor.isJonworkConversation {
                 piStatusView.isHidden = true
                 editor.setJonworkConversation(false)
                 editor.isUserInteractionEnabled = true
                 setNeedsLayout()
-            #else
+            } else {
+                editor.prepareForReuse()
+                messageListViews.values.forEach { $0.removeFromSuperview() }
+                messageListViews.removeAll()
                 showJonworkUnavailable()
-            #endif
+            }
             return
         }
 
@@ -414,10 +422,12 @@ class ChatView: UIView {
         if let viewState = PiSessionCoordinator.shared.viewState(for: conversationIdentifier) {
             piStatusView.update(viewState)
             let state = viewState.conversation
+            editor.inputEditor.isJonworkStreaming = state.isStreaming && state.role == .controller
+            editor.setProcessingMode(state.isStreaming)
             editor.isUserInteractionEnabled = viewState.connection == .connected
                 && state.role == .controller
                 && !state.isReleased
-            piStatusView.actionButton.menu = buildPiSessionMenu(viewState: viewState)
+            title.menuButton.menu = buildPiSessionMenu(viewState: viewState)
         } else {
             piStatusView.showConnecting()
             editor.isUserInteractionEnabled = false
@@ -457,6 +467,7 @@ class ChatView: UIView {
 
     private func buildPiSessionMenu(viewState: PiSessionCoordinator.ViewState) -> UIMenu {
         guard let conversationIdentifier else { return UIMenu() }
+        let presentationAuthorization = PiPresentationAuthorization(conversationID: conversationIdentifier)
         if viewState.connection != .connected {
             var recoveryActions: [UIMenuElement] = []
             if case let .offline(message) = viewState.connection, !message.isEmpty {
@@ -468,6 +479,7 @@ class ChatView: UIView {
                     image: UIImage(systemName: "arrow.clockwise")
                 ) { _ in
                     Task { @MainActor in
+                        guard presentationAuthorization.isCurrent else { return }
                         PiSessionCoordinator.shared.reconnect(conversationID: conversationIdentifier)
                     }
                 }
@@ -476,6 +488,15 @@ class ChatView: UIView {
         }
         let state = viewState.conversation
         var actions: [UIMenuElement] = []
+        actions.append(UIAction(title: String(localized: "Conversation Activity"), image: UIImage(systemName: "list.bullet.rectangle")) { [weak self] _ in
+            guard presentationAuthorization.isCurrent else { return }
+            self?.parentViewController?.present(UINavigationController(rootViewController: PiConversationActivityController(conversationID: conversationIdentifier)), animated: true)
+        })
+        actions.append(UIAction(title: String(localized: "Export Conversation"), image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in
+            guard presentationAuthorization.isCurrent else { return }
+            self?.parentViewController?.present(UINavigationController(rootViewController: PiConversationExportController(conversationID: conversationIdentifier)), animated: true)
+        })
+        actions.append(PiSessionCoordinator.shared.nativeFlagsMenu(conversationID: conversationIdentifier))
         let mutationPending = viewState.pendingAction != nil
         if viewState.pendingAction == .takeover {
             actions.append(UIAction(
@@ -485,58 +506,11 @@ class ChatView: UIView {
             ) { _ in })
         }
         if state.role == .controller, !state.isReleased {
-            let models = PiSessionCoordinator.shared.models(conversationID: conversationIdentifier)
-            let modelActions = models.map { model in
-                UIAction(
-                    title: model.name,
-                    state: state.model?.provider == model.provider && state.model?.id == model.id ? .on : .off
-                ) { [weak self] _ in
-                    Task {
-                        await self?.performPiAction {
-                            try await PiSessionCoordinator.shared.setModel(
-                                provider: model.provider,
-                                modelID: model.id,
-                                conversationID: conversationIdentifier
-                            )
-                        }
-                    }
-                }
-            }
-            actions.append(UIMenu(
-                title: String(localized: "Model"),
-                image: UIImage(systemName: "cpu"),
-                options: .displayInline,
-                children: modelActions
-            ))
-            if let model = PiSessionCoordinator.shared.selectedModel(conversationID: conversationIdentifier),
-               !model.thinkingLevels.isEmpty
-            {
-                let thinkingActions = model.thinkingLevels.map { level in
-                    UIAction(
-                        title: level.rawValue.capitalized,
-                        state: state.thinkingLevel == level.rawValue ? .on : .off
-                    ) { [weak self] _ in
-                        Task {
-                            await self?.performPiAction {
-                                try await PiSessionCoordinator.shared.setThinkingLevel(
-                                    level,
-                                    conversationID: conversationIdentifier
-                                )
-                            }
-                        }
-                    }
-                }
-                actions.append(UIMenu(
-                    title: String(localized: "Thinking"),
-                    image: UIImage(systemName: "brain"),
-                    options: .displayInline,
-                    children: thinkingActions
-                ))
-            }
             actions.append(UIAction(
                 title: String(localized: "Rename"),
                 image: UIImage(systemName: "pencil")
             ) { [weak self] _ in
+                guard presentationAuthorization.isCurrent else { return }
                 self?.presentPiRename(
                     conversationID: conversationIdentifier,
                     currentName: ConversationManager.shared.conversation(identifier: conversationIdentifier)?.title
@@ -548,7 +522,7 @@ class ChatView: UIView {
                 title: String(localized: "Stop Response"),
                 image: UIImage(systemName: "stop.circle")
             ) { [weak self] _ in
-                Task { await self?.performPiAction { try await PiSessionCoordinator.shared.abort(conversationID: conversationIdentifier) } }
+                Task { await self?.performPiAction { guard presentationAuthorization.isCurrent else { throw CancellationError() }; try await PiSessionCoordinator.shared.abort(conversationID: conversationIdentifier) } }
             })
         }
         if state.role == .controller, !state.isStreaming, state.lastFailedOperationID != nil {
@@ -557,9 +531,10 @@ class ChatView: UIView {
                 image: UIImage(systemName: "arrow.clockwise")
             ) { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    guard let self else { return }
+                    guard let self, presentationAuthorization.isCurrent else { return }
                     await self.performPiAction {
                         _ = try await self.performPiSharingOperation(conversationID: conversationIdentifier) { authorization in
+                            guard presentationAuthorization.isCurrent else { throw CancellationError() }
                             try await PiSessionCoordinator.shared.retry(
                                 conversationID: conversationIdentifier, sharingAuthorization: authorization
                             )
@@ -569,12 +544,18 @@ class ChatView: UIView {
                 }
             })
         }
+        if state.role == .controller, !state.isStreaming, !state.isReleased, !mutationPending {
+            actions.append(UIAction(title: String(localized: "Compact Context"), image: UIImage(systemName: "arrow.down.right.and.arrow.up.left")) { [weak self] _ in
+                guard presentationAuthorization.isCurrent else { return }
+                self?.confirmPiCompaction(conversationID: conversationIdentifier)
+            })
+        }
         if state.role == .viewer, !state.isStreaming, !mutationPending {
             actions.append(UIAction(
                 title: String(localized: "Edit on This Device"),
                 image: UIImage(systemName: "hand.raised")
             ) { [weak self] _ in
-                Task { await self?.performPiAction { try await PiSessionCoordinator.shared.takeOver(conversationID: conversationIdentifier) } }
+                Task { await self?.performPiAction { guard presentationAuthorization.isCurrent else { throw CancellationError() }; try await PiSessionCoordinator.shared.takeOver(conversationID: conversationIdentifier) } }
             })
         } else if state.role == .viewer, state.isStreaming {
             actions.append(UIAction(
@@ -589,6 +570,7 @@ class ChatView: UIView {
                 image: UIImage(systemName: "terminal"),
                 attributes: .destructive
             ) { [weak self] _ in
+                guard presentationAuthorization.isCurrent else { return }
                 self?.confirmPiRelease(conversationID: conversationIdentifier)
             })
         }
@@ -601,7 +583,33 @@ class ChatView: UIView {
         return UIMenu(title: String(localized: "Conversation"), children: actions)
     }
 
+    private func confirmPiCompaction(conversationID: Conversation.ID) {
+        let presentationAuthorization = PiPresentationAuthorization(conversationID: conversationID)
+        let alert = UIAlertController(title: String(localized: "Compact Context"), message: String(localized: "Summarize earlier context to make room for the next messages. The conversation stays available."), preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Continue"), style: .default) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                await self.performPiAction {
+                    _ = try await self.performPiSharingOperation(conversationID: conversationID) { authorization in
+                        guard presentationAuthorization.isCurrent else { throw CancellationError() }
+                        try await PiSessionCoordinator.shared.compact(conversationID: conversationID, sharingAuthorization: authorization)
+                        return true
+                    }
+                }
+            }
+        })
+        NotificationCenter.default.publisher(for: .piAuthenticationEpochDidChange)
+            .sink { [weak alert] _ in
+                guard !presentationAuthorization.isCurrent else { return }
+                alert?.textFields?.forEach { $0.text = "" }
+                alert?.dismiss(animated: false)
+            }.store(in: &cancellables)
+        parentViewController?.present(alert, animated: true)
+    }
+
     private func confirmPiRelease(conversationID: Conversation.ID) {
+        let presentationAuthorization = PiPresentationAuthorization(conversationID: conversationID)
         let alert = UIAlertController(
             title: String(localized: "Continue on Desktop?"),
             message: String(localized: "Jonwork will stop editing on this device and keep the conversation available on your desktop."),
@@ -611,16 +619,24 @@ class ChatView: UIView {
         alert.addAction(UIAlertAction(title: String(localized: "Continue"), style: .destructive) { [weak self] _ in
             Task {
                 await self?.performPiAction {
+                    guard presentationAuthorization.isCurrent else { throw CancellationError() }
                     try await PiSessionCoordinator.shared.release(conversationID: conversationID)
                     SettingController.setNextEntryPage(.piServer)
                     self?.parentViewController?.present(SettingController(), animated: true)
                 }
             }
         })
+        NotificationCenter.default.publisher(for: .piAuthenticationEpochDidChange)
+            .sink { [weak alert] _ in
+                guard !presentationAuthorization.isCurrent else { return }
+                alert?.textFields?.forEach { $0.text = "" }
+                alert?.dismiss(animated: false)
+            }.store(in: &cancellables)
         parentViewController?.present(alert, animated: true)
     }
 
     private func presentPiRename(conversationID: Conversation.ID, currentName: String?) {
+        let presentationAuthorization = PiPresentationAuthorization(conversationID: conversationID)
         let alert = UIAlertController(
             title: String(localized: "Rename"),
             message: nil,
@@ -632,7 +648,9 @@ class ChatView: UIView {
             guard let name = alert?.textFields?.first?.text else { return }
             Task {
                 await self?.performPiAction {
+                    guard presentationAuthorization.isCurrent else { throw CancellationError() }
                     try await PiSessionCoordinator.shared.rename(name, conversationID: conversationID)
+                    guard presentationAuthorization.isCurrent else { throw CancellationError() }
                     ConversationManager.shared.editConversation(identifier: conversationID) {
                         $0.update(\.title, to: name.trimmingCharacters(in: .whitespacesAndNewlines))
                         $0.update(\.shouldAutoRename, to: false)
@@ -640,6 +658,12 @@ class ChatView: UIView {
                 }
             }
         })
+        NotificationCenter.default.publisher(for: .piAuthenticationEpochDidChange)
+            .sink { [weak alert] _ in
+                guard !presentationAuthorization.isCurrent else { return }
+                alert?.textFields?.forEach { $0.text = "" }
+                alert?.dismiss(animated: false)
+            }.store(in: &cancellables)
         parentViewController?.present(alert, animated: true)
     }
 
@@ -900,11 +924,24 @@ extension ChatView {
             conv = identifier
             let conversation = ConversationManager.shared.conversation(identifier: identifier)
             icon.image = conversation?.interfaceImage
-            menuButton.isHidden = !JonworkSurfacePolicy.permitsLegacyConversationActions(
+            menuButton.isHidden = PiSessionCoordinator.shared.binding(for: identifier) == nil && !JonworkSurfacePolicy.permitsLegacyConversationActions(
                 hasJonworkBinding: PiSessionCoordinator.shared.binding(for: identifier) != nil,
                 allowsLegacyConversations: allowsLegacyConversations
             )
             legacyMenuContainer?.isHidden = menuButton.isHidden
+            if PiSessionCoordinator.shared.binding(for: identifier) != nil {
+                menuButton.snp.remakeConstraints { make in
+                    make.centerY.equalTo(textLabel)
+                    make.leading.equalTo(textLabel.snp.trailing).offset(4)
+                    make.width.height.equalTo(34)
+                }
+                legacyMenuContainer?.snp.remakeConstraints { make in
+                    make.centerY.equalTo(textLabel)
+                    make.leading.equalTo(textLabel.snp.trailing).offset(4)
+                    make.width.height.equalTo(34)
+                }
+                menuButton.accessibilityLabel = String(localized: "Conversation actions")
+            }
             doWithAnimation {
                 self.textLabel.text = conversation?.title ?? String(localized: "Untitled")
             }

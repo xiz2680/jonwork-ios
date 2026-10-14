@@ -31,6 +31,7 @@ extension ConversationSelectionView {
 
         let titleLabel = UILabel().with {
             $0.font = .preferredFont(forTextStyle: .body)
+            $0.adjustsFontForContentSizeCategory = true
             $0.textColor = .label
             $0.numberOfLines = 1
             $0.textAlignment = .left
@@ -47,7 +48,7 @@ extension ConversationSelectionView {
             separatorInset = .zero
 
             let selectionColor = UIView().with {
-                $0.backgroundColor = .accent.withAlphaComponent(0.15)
+                $0.backgroundColor = .tintColor.withAlphaComponent(0.09)
                 $0.layer.cornerRadius = 12
             }
             selectedBackgroundView = selectionColor
@@ -84,7 +85,11 @@ extension ConversationSelectionView {
                 return
             }
             titleLabel.text = conv.title
-            iconView.image = conv.interfaceImage
+            if !allowsLegacyConversations || PiSessionCoordinator.shared.binding(for: conv.id) != nil {
+                iconView.image = UIImage(systemName: "bubble.left.and.bubble.right") ?? UIImage(systemName: "bubble.left")
+            } else {
+                iconView.image = conv.interfaceImage
+            }
         }
 
         func contextMenuInteraction(
@@ -92,6 +97,11 @@ extension ConversationSelectionView {
             configurationForMenuAtLocation _: CGPoint,
         ) -> UIContextMenuConfiguration? {
             guard let conversationIdentifier else { return nil }
+            if PiSessionCoordinator.shared.binding(for: conversationIdentifier) != nil {
+                return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+                    PiSessionCoordinator.shared.nativeFlagsMenu(conversationID: conversationIdentifier)
+                }
+            }
             guard JonworkSurfacePolicy.permitsLegacyConversationActions(
                 hasJonworkBinding: PiSessionCoordinator.shared.binding(for: conversationIdentifier) != nil,
                 allowsLegacyConversations: allowsLegacyConversations

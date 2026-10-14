@@ -2,9 +2,75 @@
 import CryptoKit
 import Foundation
 import Testing
+import UIKit
 
 @Suite(.serialized)
 struct PiSessionCoordinatorTests {
+    @Test @MainActor
+    func retainedExportAndActionsRejectIdenticalBindingInNewAuthenticationEpoch() async throws {
+        let service = PiServiceSpy(snapshots: [
+            snapshot(title: "Account A", message: "ACCOUNT_A_PRIVATE"),
+            snapshot(title: "Account B", message: "ACCOUNT_B_PRIVATE"),
+        ], streams: [pendingStream(), pendingStream()])
+        let (coordinator, defaults) = makeCoordinator(service: service) { _, _ in }
+        defer { coordinator.unbindAll(); defaults.removePersistentDomain(forName: defaultsSuite) }
+        bind(coordinator, conversationID: "conversation", sessionID: "shared-session")
+        try await waitUntil { coordinator.viewState(for: "conversation")?.connection == .connected }
+        let oldBinding = coordinator.binding(for: "conversation")
+        let old = PiConversationExportController(conversationID: "conversation", coordinator: coordinator)
+        old.loadViewIfNeeded()
+        #expect(String(data: try #require(old.exportData(pdf: false)), encoding: .utf8)?.contains("ACCOUNT_A_PRIVATE") == true)
+        let context = PiPresentationAuthorization(conversationID: "conversation", coordinator: coordinator)
+        let menu = coordinator.nativeFlagsMenu(conversationID: "conversation")
+        _ = coordinator.beginAuthenticationEpoch()
+        coordinator.unbindAll()
+        bind(coordinator, conversationID: "conversation", sessionID: "shared-session")
+        try await waitUntil { coordinator.viewState(for: "conversation")?.conversation.messages.first?.text == "ACCOUNT_B_PRIVATE" }
+        #expect(coordinator.binding(for: "conversation") == oldBinding)
+        #expect(!context.isCurrent)
+        #expect(old.exportData(pdf: false) == nil)
+        #expect(old.exportData(pdf: true) == nil)
+        #expect(old.tableView(old.tableView, numberOfRowsInSection: 0) == 0)
+        for action in menu.children.compactMap({ $0 as? UIAction }) {
+            let button = UIButton(primaryAction: action)
+            button.sendActions(for: .primaryActionTriggered)
+        }
+        #expect(coordinator.nativeFlags(for: "conversation") == .init())
+        let freshMenu = coordinator.nativeFlagsMenu(conversationID: "conversation")
+        let freshAction = try #require(freshMenu.children.first as? UIAction)
+        UIButton(primaryAction: freshAction).sendActions(for: .primaryActionTriggered)
+        #expect(coordinator.nativeFlags(for: "conversation").favorite)
+        let fresh = PiConversationExportController(conversationID: "conversation", coordinator: coordinator)
+        #expect(String(data: try #require(fresh.exportData(pdf: false)), encoding: .utf8)?.contains("ACCOUNT_B_PRIVATE") == true)
+    }
+
+    @Test @MainActor
+    func delayedMutationSnapshotCannotRestoreLoggedOutOrReboundHistory() async throws {
+        let stream = ControlledEventStream()
+        let service = PiServiceSpy(snapshots: [
+            snapshot(title: "Old", message: "old private history", controllerClientID: "controller"),
+            snapshot(title: "Delayed old result", message: "old private result", revision: 2, controllerClientID: "controller"),
+            snapshot(title: "New account", message: "new account history", controllerClientID: "new-client"),
+        ], streams: [stream.stream, pendingStream()])
+        var renderedTexts: [String] = []
+        let (coordinator, defaults) = makeCoordinator(service: service) { _, state in renderedTexts.append(state.messages.first?.text ?? "") }
+        defer { coordinator.unbindAll(); defaults.removePersistentDomain(forName: defaultsSuite) }
+        bind(coordinator, conversationID: "conversation", sessionID: "session", clientID: "controller")
+        try await waitUntil { coordinator.viewState(for: "conversation")?.connection == .connected }
+        let suspension = SuspendedAttachmentUpload()
+        service.suspendSnapshots { await suspension.wait() }
+        let mutation = Task { try await coordinator.rename("renamed", conversationID: "conversation") }
+        try await waitUntil { service.stateCallCount >= 2 }
+        await coordinator.revokeAllCredentialsAndState()
+        #expect(coordinator.viewState(for: "conversation") == nil)
+        service.clearSnapshotSuspension()
+        bind(coordinator, conversationID: "conversation", sessionID: "session", clientID: "new-client")
+        await suspension.release()
+        await #expect(throws: CancellationError.self) { try await mutation.value }
+        try await waitUntil { coordinator.viewState(for: "conversation")?.conversation.messages.first?.text == "new account history" }
+        #expect(!renderedTexts.contains("old private result"))
+        #expect(coordinator.viewState(for: "conversation")?.conversation.messages.first?.text == "new account history")
+    }
     @Test
     @MainActor
     func `normal stream termination refetches an authoritative snapshot before reconnecting`() async throws {
@@ -217,7 +283,7 @@ struct PiSessionCoordinatorTests {
             snapshots: [
                 snapshot(title: "Before", message: "before"),
                 snapshot(
-                    title: "After", message: "after", revision: 2,
+                    title: "After", message: "after", revision: 2, lastEventID: "3",
                     model: .init(provider: model.provider, id: model.id)
                 ),
             ],
@@ -552,8 +618,11 @@ struct PiSessionCoordinatorTests {
         bind(coordinator, conversationID: "conversation", sessionID: "session")
         try await waitUntil { coordinator.viewState(for: "conversation")?.connection == .connected }
 
+        coordinator.saveTextDraft("private unsent draft", conversationID: "conversation")
+        #expect(coordinator.textDraft(for: "conversation") == "private unsent draft")
         await coordinator.revokeAllCredentialsAndState()
 
+        #expect(coordinator.textDraft(for: "conversation").isEmpty)
         #expect(service.cancelCount == 1)
         #expect(coordinator.binding(for: "conversation") == nil)
         await #expect(throws: PiCoordinatorError.notBound) {
@@ -1055,7 +1124,7 @@ private func snapshot(
     message: String,
     sessionID: String = "session",
     revision: Int = 1,
-    lastEventID: String = "0",
+    lastEventID: String? = nil,
     streaming: Bool = false,
     model: PiGatewayWire.Snapshot.Configuration.Model? = nil,
     thinkingLevel: PiGatewayWire.ThinkingLevel = .off,
@@ -1066,11 +1135,11 @@ private func snapshot(
         sessionId: sessionID,
         repositoryId: "/repo",
         revision: revision,
-        lastEventId: lastEventID,
+        lastEventId: lastEventID ?? String(max(0, revision - 1)),
         lifecycle: .idle,
         runtime: .running,
         run: .init(status: streaming ? .running : .idle, operationId: streaming ? "operation-active" : nil),
-        controller: .init(clientId: controllerClientID, leaseExpiresAt: nil),
+        controller: .init(clientId: controllerClientID, leaseExpiresAt: controllerClientID == nil ? nil : Date().addingTimeInterval(60)),
         configuration: .init(model: model, thinkingLevel: thinkingLevel),
         messages: [.init(
             id: "message",
@@ -1239,6 +1308,7 @@ private final class PiServiceSpy: PiServiceProtocol, @unchecked Sendable {
     private var uploadResults: [Result<PiGatewayWire.Attachment, Error>] = []
     private var recordedUploadKeys: [String] = []
     private var uploadSuspension: (@Sendable () async -> Void)?
+    private var snapshotSuspension: (@Sendable () async -> Void)?
 
     init(
         snapshots: [PiGatewayWire.Snapshot],
@@ -1279,6 +1349,11 @@ private final class PiServiceSpy: PiServiceProtocol, @unchecked Sendable {
     func suspendUploads(_ operation: @escaping @Sendable () async -> Void) {
         lock.withLock { uploadSuspension = operation }
     }
+    func clearSnapshotSuspension() { lock.withLock { snapshotSuspension = nil } }
+
+    func suspendSnapshots(_ operation: @escaping @Sendable () async -> Void) {
+        lock.withLock { snapshotSuspension = operation }
+    }
 
     func enqueueUpload(_ result: Result<PiGatewayWire.Attachment, Error>) {
         lock.withLock { uploadResults.append(result) }
@@ -1290,11 +1365,13 @@ private final class PiServiceSpy: PiServiceProtocol, @unchecked Sendable {
     func listModels() async throws -> [PiGatewayWire.Model] { lock.withLock { availableModelValues } }
 
     func snapshot(sessionID _: String) async throws -> PiGatewayWire.Snapshot {
-        try lock.withLock {
+        let value = try lock.withLock {
             let index = min(stateCalls, snapshotResults.count - 1)
             stateCalls += 1
             return try snapshotResults[index].get()
         }
+        if let suspension = lock.withLock({ snapshotSuspension }) { await suspension() }
+        return value
     }
 
     func events(sessionID _: String, clientID: String, afterEventID _: String) -> AsyncThrowingStream<PiGatewayWire.Event, Error> {

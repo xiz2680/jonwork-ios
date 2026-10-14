@@ -294,14 +294,19 @@ extension ChatView: RichEditorView.Delegate {
 
   func onRichEditorRequestObjectForRestore() -> RichEditorView.Object? {
     guard let conversationIdentifier else { return nil }
-    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return nil }
+    if PiSessionCoordinator.shared.binding(for: conversationIdentifier) != nil {
+      return .init(text: PiSessionCoordinator.shared.textDraft(for: conversationIdentifier))
+    }
     return ConversationManager.shared.getRichEditorObject(identifier: conversationIdentifier)
   }
 
   func onRichEditorUpdateObject(object: RichEditorView.Object) {
     guard let conversationIdentifier else { return }
     guard permitsConversation(conversationIdentifier) else { return }
-    guard PiSessionCoordinator.shared.binding(for: conversationIdentifier) == nil else { return }
+    if PiSessionCoordinator.shared.binding(for: conversationIdentifier) != nil {
+      PiSessionCoordinator.shared.saveTextDraft(object.text, conversationID: conversationIdentifier)
+      return
+    }
     ConversationManager.shared.setRichEditorObject(identifier: conversationIdentifier, object)
     offloadModelsToSession(modelIdentifier: modelIdentifier())
   }

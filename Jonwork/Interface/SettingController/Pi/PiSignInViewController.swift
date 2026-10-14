@@ -66,10 +66,8 @@ final class PiSignInViewController: UIViewController {
 
     }
 
-    private static func presentedMessage(for error: Error) -> String {
+    static func presentedMessage(for error: Error) -> String {
         switch error as? PiServiceError {
-        case .networkUnavailable, .timedOut, .transportFailure, .connectionLost:
-            String(localized: "The Jonwork service for this build is unavailable. Please try again after the gateway is online.")
         case .invalidResponse:
             String(localized: "This Jonwork server does not support iOS conversations yet. Please update the gateway and try again.")
         default:
