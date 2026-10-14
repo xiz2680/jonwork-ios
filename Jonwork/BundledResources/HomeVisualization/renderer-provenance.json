@@ -1,0 +1,28 @@
+{
+  "purpose": "Pinned offline rendering assets; no CDN or runtime package resolution",
+  "assets": [
+    {
+      "package": "mermaid",
+      "version": "11.16.1",
+      "npmIntegrity": "sha512-TQsq6u22fAn3rek5VOubrhKPo1g5hwC3FXUN9hiyupTckcYiGuuKGkNQrKYwGJkXUxZdojwRG46gsSCFZMDp4g==",
+      "sourceArtifact": "dist/mermaid.min.js",
+      "bundledArtifact": "home-mermaid.min.js",
+      "sha256": "18327bef70d96fb505fe7287d9f6a7362ebf07ff6576ddfaffb1a06f3e1a2954",
+      "license": "MIT"
+    },
+    {
+      "package": "chart.js",
+      "version": "4.5.1",
+      "npmIntegrity": "sha512-GIjfiT9dbmHRiYi6Nl2yFCq7kkwdkp1W/lp2J99rX0yo9tgJGn3lKQATztIjb5tVtevcBtIdICNWqlq5+E8/Pw==",
+      "sourceArtifact": "dist/chart.umd.js",
+      "bundledArtifact": "home-chart.umd.js",
+      "sha256": "ecc3cd1eeb8c34d2178e3f59fd63ec5a3d84358c11730af0b9958dc886d7652a",
+      "license": "MIT"
+    }
+  ],
+  "upstreamLockSha256": "87549c6ba36eb8e6188e49ff3bc688b0c9b295f19aee937d1907fe7c5ab899dc",
+  "licenseFilesSha256": "9e42ffc5fe6488b29b6f79ba3a5f347f70c408d7b1c3005a3c9500e1b0d0bd5d",
+  "productionDependencyLicenseScanCount": 117,
+  "missingLicenseFiles": [],
+  "licenseReview": "Independent bundled-artifact license review required; unbundled dependency traversal does not establish each module is bundled"
+}

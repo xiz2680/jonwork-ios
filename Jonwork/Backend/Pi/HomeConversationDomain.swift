@@ -212,6 +212,12 @@ struct HomeConversationActivity: Equatable, Sendable {
         let title: String
         let subtitle: String
         let detail: String
+        let visualization: HomeVisualization?
+
+        init(kind: Kind, title: String, subtitle: String, detail: String, visualization: HomeVisualization? = nil) {
+            self.kind = kind; self.title = title; self.subtitle = subtitle; self.detail = detail
+            self.visualization = visualization
+        }
     }
     let phase: HomeConversationProjection.Phase
     let execution: [Row]
@@ -242,7 +248,7 @@ struct HomeConversationActivity: Equatable, Sendable {
                     } else {
                         let code = metadata?["code"]?["content"]?.stringValue
                         results.append(.init(kind: .result, title: metadata?["render_type"]?.stringValue ?? type,
-                                             subtitle: content, detail: code ?? detail))
+                                             subtitle: content, detail: code ?? detail, visualization: HomeVisualization(metadata: metadata)))
                     }
                     if let values = metadata?["metadata"]?["cost_summary"]?.objectValue {
                         for key in values.keys.sorted() {

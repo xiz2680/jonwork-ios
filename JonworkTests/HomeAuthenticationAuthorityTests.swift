@@ -146,6 +146,28 @@ struct HomeAuthenticationAuthorityTests {
         await #expect(throws: PiServiceError.authenticationRequired) { _ = try await client.history() }
     }
 
+    @Test
+    func capturedPresentationRejectsSameVerifiedIdentityInNewEpoch() async throws {
+        let fixture = HomeRequestFixture()
+        let session = fixture.session()
+        defer { session.invalidateAndCancel(); HomeFixtureURLProtocol.fixture = nil }
+        let store = MemoryHomeCredentials(tokens: tokens("a"))
+        let authority = HomeAuthenticationAuthority()
+        let first = HomeGatewayClient(origin: origin, session: session, authority: authority, credentials: store)
+        let a = try await first.signIn(anchor: { ASPresentationAnchor() })
+        let old = first.presentationAuthorization(identity: a.identity)
+        #expect(old())
+        store.tokens = tokens("b")
+        let second = HomeGatewayClient(origin: origin, session: session, authority: authority, credentials: store)
+        let b = try await second.signIn(anchor: { ASPresentationAnchor() })
+        #expect(a.identity == b.identity)
+        #expect(!old())
+        #expect(second.presentationAuthorization(identity: b.identity)())
+        _ = second.prepareSignOut(anchor: { ASPresentationAnchor() })
+        #expect(!old())
+        #expect(!second.presentationAuthorization(identity: b.identity)())
+    }
+
     private func waitUntil(_ condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         while !condition() {

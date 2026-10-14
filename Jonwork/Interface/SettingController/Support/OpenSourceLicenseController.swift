@@ -14,6 +14,11 @@ class OpenSourceLicenseController: CodeEditorController {
            let content = try? String(contentsOf: item)
         { text = content }
 
+        if let item = Bundle.main.url(forResource: "home-visualization-licenses", withExtension: "txt"),
+           let content = try? String(contentsOf: item, encoding: .utf8) {
+            text += "\n\nMermaid / Chart.js\n\n" + content
+        }
+
         super.init(language: "markdown", text: text)
 
         title = String(localized: "Open Source Licenses")

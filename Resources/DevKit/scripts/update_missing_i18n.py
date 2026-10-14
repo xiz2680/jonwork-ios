@@ -1488,6 +1488,31 @@ NEW_STRINGS.update({'Jonwork': {'de': 'Jonwork',
              'ko': 'Jonwork',
              'zh-Hans': 'Jonwork'}})
 
+NEW_STRINGS.update({'Visualization Preview': {'de': 'Visualisierungsvorschau',
+                           'es': 'Vista previa de visualización',
+                           'fr': 'Aperçu de la visualisation',
+                           'ja': '可視化プレビュー',
+                           'ko': '시각화 미리보기',
+                           'zh-Hans': '可视化预览'},
+ 'Unable to Render Preview': {'de': 'Vorschau kann nicht dargestellt werden',
+                              'es': 'No se puede mostrar la vista previa',
+                              'fr': 'Impossible d’afficher l’aperçu',
+                              'ja': 'プレビューを表示できません',
+                              'ko': '미리보기를 표시할 수 없음',
+                              'zh-Hans': '无法渲染预览'},
+ 'Original Metadata': {'de': 'Originalmetadaten',
+                       'es': 'Metadatos originales',
+                       'fr': 'Métadonnées d’origine',
+                       'ja': '元のメタデータ',
+                       'ko': '원본 메타데이터',
+                       'zh-Hans': '原始元数据'},
+ 'Share Image': {'de': 'Bild teilen',
+                 'es': 'Compartir imagen',
+                 'fr': 'Partager l’image',
+                 'ja': '画像を共有',
+                 'ko': '이미지 공유',
+                 'zh-Hans': '分享图片'}})
+
 if __name__ == "__main__":
     file_path = sys.argv[1] if len(sys.argv) > 1 else default_file_path()
 

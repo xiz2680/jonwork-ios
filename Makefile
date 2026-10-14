@@ -64,7 +64,7 @@ endef
 
 .PHONY: all help \
 	build build-ios build-ios-qa build-ios-candidate build-ios-simulator build-catalyst build-extension \
-	test test-unit test-online-e2e test-localization-validator \
+	test test-unit test-online-e2e test-localization-validator test-build-log-classifier \
 	install-metal-toolchain package-resolve package-update scan-license \
 	localization-check localization-stale-check localization-extracted-check \
 	archive archive-ios archive-macos \
@@ -87,6 +87,7 @@ help:
 	@echo "  test-unit             Run app tests on the first available iOS simulator"
 	@echo "  test-online-e2e       Run online e2e tests"
 	@echo "  test-localization-validator  Test compiler localization validation"
+	@echo "  test-build-log-classifier   Test exact build log classification"
 	@echo ""
 	@echo "Packages & licenses:"
 	@echo "  install-metal-toolchain  Install the Xcode Metal toolchain"
@@ -191,6 +192,9 @@ scan-license:
 
 localization-extracted-check:
 	python3 Resources/DevKit/scripts/check_extracted_i18n.py --derived-data "$(DERIVED_DATA)" --catalog Jonwork/Resources/Localizable.xcstrings $(if $(LOCALIZATION_SOURCE_MANIFEST),--manifest "$(LOCALIZATION_SOURCE_MANIFEST)")
+
+test-build-log-classifier:
+	python3 Resources/DevKit/scripts/test_xcodebuild_log_classifier.py
 
 test-localization-validator:
 	python3 Resources/DevKit/scripts/test_check_extracted_i18n.py

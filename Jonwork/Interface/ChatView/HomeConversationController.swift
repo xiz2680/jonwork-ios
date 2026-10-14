@@ -124,7 +124,8 @@ final class HomeConversationHistoryController: UITableViewController {
                 let projection = try await self.client.snapshot(sessionID: id)
                 try Task.checkCancellation()
                 guard self.isActive, projection.identity == self.handshake.identity else { return }
-                let controller = HomeConversationController(projection: projection, authorization: { [weak self] in self?.isActive == true })
+                let current = self.client.presentationAuthorization(identity: projection.identity)
+                let controller = HomeConversationController(projection: projection, authorization: { [weak self] in self?.isActive == true && current() })
                 self.navigationController?.pushViewController(controller, animated: true)
             } catch is CancellationError { return }
             catch { if self.isActive, !Task.isCancelled { self.showError(error) } }

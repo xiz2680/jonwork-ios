@@ -73,10 +73,14 @@ final class HomeConversationActivityController: UITableViewController {
         tableView.deselectRow(at: indexPath, animated: true)
         guard authorization(), indexPath.section > 0 else { return }
         let row = groups[indexPath.section - 1][indexPath.row]
-        showDetail(title: row.title, text: row.detail)
+        if let visualization = row.visualization {
+            navigationController?.pushViewController(HomeVisualizationController(result: visualization, authorization: authorization), animated: true)
+        } else {
+            showDetail(title: row.title, text: row.detail)
+        }
     }
     private func showDetail(title: String, text: String) {
-        let controller = TextViewerController(editable: false)
+        let controller = HomeAuthorizedTextViewer(authorization: authorization)
         controller.title = title; controller.text = text
         navigationController?.pushViewController(controller, animated: true)
     }

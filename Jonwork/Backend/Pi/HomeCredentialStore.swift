@@ -163,6 +163,17 @@ final class HomeGatewayClient {
         return value
     }
 
+    /// Capture the verified identity and both local/shared authorization lifetimes.
+    func presentationAuthorization(identity expected: HomeGateway.Identity) -> () -> Bool {
+        let stamp = generation
+        let epoch = authorityEpoch
+        return { [weak self] in
+            guard let self, self.authorityEpoch == epoch, self.isCurrent(stamp),
+                  self.identity == expected, self.tokens?.scope == "home.read" else { return false }
+            return true
+        }
+    }
+
     func nativeFlags(sessionID: String) throws -> PiConversationPreferences.Flags {
         let identity = try requireIdentity()
         return authority.flags(identity: identity, origin: origin, sessionID: sessionID)
