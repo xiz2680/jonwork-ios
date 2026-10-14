@@ -1,10 +1,59 @@
 @testable import Jonwork
 import Foundation
+import GlyphixTextFx
 import Testing
 import UIKit
 
 @Suite(.serialized)
 struct JonworkLayoutRegressionTests {
+    @Test(arguments: [CGFloat(314), 320, 430]) @MainActor
+    func titleMenuAndNewConversationHaveSeparateVisibleAndHitFrames(width: CGFloat) throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = .init(x: 0, y: 0, width: width, height: 800)
+        let presenter = UIViewController()
+        window.rootViewController = presenter
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        let header = ChatView.TitleBar(allowsLegacyConversations: true)
+        presenter.view.addSubview(header)
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: presenter.view.safeAreaLayoutGuide.topAnchor),
+            header.leadingAnchor.constraint(equalTo: presenter.view.leadingAnchor),
+            header.trailingAnchor.constraint(equalTo: presenter.view.trailingAnchor),
+        ])
+        header.use(identifier: nil)
+        header.piControls.isHidden = false
+        header.textLabel.text = "iOS connection acceptance conversation with a long title"
+        for category in [UIContentSizeCategory.large, .accessibilityExtraExtraExtraLarge] {
+            header.traitOverrides.preferredContentSizeCategory = category
+            header.textLabel.font = UIFont.preferredFont(forTextStyle: .body, compatibleWith: header.traitCollection).bold
+            presenter.view.setNeedsLayout()
+            presenter.view.layoutIfNeeded()
+            let menu = header.menuButton
+            let newConversation = header.piControls.actionButton
+            let menuFrame = menu.convert(menu.bounds, to: header)
+            let newFrame = newConversation.convert(newConversation.bounds, to: header)
+            let titleFrame = header.textLabel.convert(header.textLabel.bounds, to: header)
+            #expect(menuFrame.width >= 44 && menuFrame.height >= 44)
+            #expect(newFrame.width >= 44 && newFrame.height >= 44)
+            #expect(titleFrame.maxX + 8 <= menuFrame.minX + 0.5)
+            #expect(menuFrame.maxX + 8 <= newFrame.minX + 0.5)
+            #expect(!menuFrame.intersects(newFrame))
+            #expect(header.bounds.contains(menuFrame))
+            #expect(header.bounds.contains(newFrame))
+            #expect(header.hitTest(.init(x: menuFrame.midX, y: menuFrame.midY), with: nil) === menu)
+            #expect(header.hitTest(.init(x: newFrame.midX, y: newFrame.midY), with: nil) === newConversation)
+            for frame in [menuFrame, newFrame] {
+                let expected: UIView = frame == menuFrame ? menu : newConversation
+                for point in [CGPoint(x: frame.midX, y: frame.minY + 1), CGPoint(x: frame.midX, y: frame.maxY - 1), CGPoint(x: frame.minX + 1, y: frame.midY), CGPoint(x: frame.maxX - 1, y: frame.midY)] {
+                    #expect(header.hitTest(point, with: nil) === expected)
+                }
+            }
+            #expect(!menu.point(inside: menu.convert(.init(x: newFrame.midX, y: newFrame.midY), from: header), with: nil))
+        }
+    }
+
     @Test @MainActor
     func nativeComposerKeepsAttachmentReachableWhileEditingWithoutOverlappingSend() {
         let editor = RichEditorView()

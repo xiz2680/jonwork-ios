@@ -710,11 +710,15 @@ extension ChatView {
         let menuButton = EasyMenuButton().with {
             var config = UIButton.Configuration.plain()
             config.image = UIImage(systemName: "chevron.down")
+            config.contentInsets = .zero
+            config.preferredSymbolConfigurationForImage = .init(pointSize: 14, weight: .semibold)
             $0.imageView?.contentMode = .scaleAspectFit
             $0.configuration = config
             $0.tintColor = .gray.withAlphaComponent(0.5)
             $0.translatesAutoresizingMaskIntoConstraints = false
             $0.showsMenuAsPrimaryAction = true
+            $0.easyHitInsets = .zero
+            $0.accessibilityLabel = String(localized: "Conversation actions")
         }
 
         #if targetEnvironment(macCatalyst)
@@ -737,7 +741,7 @@ extension ChatView {
             translatesAutoresizingMaskIntoConstraints = false
 
             snp.makeConstraints { make in
-                make.height.equalTo(40).priority(.low)
+                make.height.equalTo(44).priority(.low)
             }
 
             #if targetEnvironment(macCatalyst)
@@ -760,6 +764,8 @@ extension ChatView {
                 piControls.snp.makeConstraints { make in
                     make.centerY.equalToSuperview()
                     make.trailing.equalToSuperview().inset(12)
+                    make.top.greaterThanOrEqualToSuperview()
+                    make.bottom.lessThanOrEqualToSuperview()
                 }
 
                 icon.snp.makeConstraints { make in
@@ -776,9 +782,10 @@ extension ChatView {
                     make.right.lessThanOrEqualTo(piControls.snp.left).offset(-8)
                 }
                 menuButton.snp.makeConstraints { make in
-                    make.centerY.equalToSuperview()
-                    make.right.equalToSuperview().inset(20)
-                    make.width.height.equalTo(18)
+                    make.centerY.equalTo(textLabel)
+                    make.leading.equalTo(textLabel.snp.trailing).offset(8)
+                    make.trailing.lessThanOrEqualTo(piControls.snp.leading).offset(-8)
+                    make.width.height.equalTo(44)
                 }
             #else
                 clipsToBounds = false
@@ -792,6 +799,8 @@ extension ChatView {
                 piControls.snp.makeConstraints { make in
                     make.centerY.equalToSuperview()
                     make.trailing.equalToSuperview().inset(12)
+                    make.top.greaterThanOrEqualToSuperview()
+                    make.bottom.lessThanOrEqualToSuperview()
                 }
 
                 let menuButtonGlass = menuButton.wrappedInGlassEffect(cornerStyle: .capsule)
@@ -799,9 +808,10 @@ extension ChatView {
                 backgroundContainer.contentView.addSubview(menuButtonGlass)
 
                 menuButtonGlass.snp.makeConstraints { make in
-                    make.centerY.equalToSuperview()
-                    make.right.equalToSuperview().inset(12)
-                    make.width.height.equalTo(34)
+                    make.centerY.equalTo(textLabel)
+                    make.leading.equalTo(textLabel.snp.trailing).offset(8)
+                    make.trailing.lessThanOrEqualTo(piControls.snp.leading).offset(-8)
+                    make.width.height.equalTo(44)
                 }
 
                 icon.snp.makeConstraints { make in
@@ -929,19 +939,6 @@ extension ChatView {
                 allowsLegacyConversations: allowsLegacyConversations
             )
             legacyMenuContainer?.isHidden = menuButton.isHidden
-            if PiSessionCoordinator.shared.binding(for: identifier) != nil {
-                menuButton.snp.remakeConstraints { make in
-                    make.centerY.equalTo(textLabel)
-                    make.leading.equalTo(textLabel.snp.trailing).offset(4)
-                    make.width.height.equalTo(34)
-                }
-                legacyMenuContainer?.snp.remakeConstraints { make in
-                    make.centerY.equalTo(textLabel)
-                    make.leading.equalTo(textLabel.snp.trailing).offset(4)
-                    make.width.height.equalTo(34)
-                }
-                menuButton.accessibilityLabel = String(localized: "Conversation actions")
-            }
             doWithAnimation {
                 self.textLabel.text = conversation?.title ?? String(localized: "Untitled")
             }

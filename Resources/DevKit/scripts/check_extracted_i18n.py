@@ -23,7 +23,7 @@ else:
     names = subprocess.check_output(
         ["git", "ls-files", "--modified", "--others", "--exclude-standard", "-z"], cwd=root,
     ).decode().split("\0")
-sources = {str(root / name) for name in names if name.startswith("Jonwork/") and name.endswith(".swift")}
+sources = {str((root / name).resolve()) for name in names if name.startswith("Jonwork/") and name.endswith(".swift")}
 if not sources:
     raise SystemExit("[-] no source inputs; provide the reviewed source manifest on a clean HEAD")
 for source in sorted(sources):
@@ -34,6 +34,9 @@ extracted = set()
 for path in args.derived_data.glob("Build/Intermediates.noindex/Jonwork.build/Debug-iphonesimulator/Jonwork.build/Objects-normal/*/*.stringsdata"):
     data = json.loads(path.read_text())
     source = data.get("source")
+    if not isinstance(source, str) or not source:
+        continue
+    source = str(Path(source).resolve())
     if source not in sources:
         continue
     extracted.add(source)
