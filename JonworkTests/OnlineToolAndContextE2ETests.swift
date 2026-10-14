@@ -11,7 +11,7 @@ import Testing
 /// - multi-turn context recall (prior assistant turn informs later answer)
 @Suite(.serialized)
 struct OnlineToolAndContextE2ETests {
-    static let responseFormats = OnlineE2ETestSupport.responseFormats
+    static let responseFormats = OnlineE2ETestSupport.responseFormats.map(\.rawValue)
 
     // MARK: Tools
 
@@ -113,8 +113,9 @@ struct OnlineToolAndContextE2ETests {
 
     @Test(.enabled(if: OnlineE2ETestSupport.isEnabled), arguments: OnlineToolAndContextE2ETests.responseFormats)
     func `single round tool call produces final answer with tool output`(
-        responseFormat: CloudModel.ResponseFormat,
+        responseFormat: String,
     ) async throws {
+        let responseFormat = try #require(CloudModel.ResponseFormat(rawValue: responseFormat))
         try #require(OnlineE2ETestSupport.isEnabled(for: responseFormat))
 
         let client = try makeClient(for: responseFormat)
@@ -167,8 +168,9 @@ struct OnlineToolAndContextE2ETests {
 
     @Test(.enabled(if: OnlineE2ETestSupport.isEnabled), arguments: OnlineToolAndContextE2ETests.responseFormats)
     func `sequential tool calls chain through two rounds`(
-        responseFormat: CloudModel.ResponseFormat,
+        responseFormat: String,
     ) async throws {
+        let responseFormat = try #require(CloudModel.ResponseFormat(rawValue: responseFormat))
         try #require(OnlineE2ETestSupport.isEnabled(for: responseFormat))
 
         let client = try makeClient(for: responseFormat)
@@ -306,8 +308,9 @@ struct OnlineToolAndContextE2ETests {
 
     @Test(.enabled(if: OnlineE2ETestSupport.isEnabled), arguments: OnlineToolAndContextE2ETests.responseFormats)
     func `multi turn conversation recalls earlier user facts`(
-        responseFormat: CloudModel.ResponseFormat,
+        responseFormat: String,
     ) async throws {
+        let responseFormat = try #require(CloudModel.ResponseFormat(rawValue: responseFormat))
         try #require(OnlineE2ETestSupport.isEnabled(for: responseFormat))
 
         let client = try makeClient(for: responseFormat)

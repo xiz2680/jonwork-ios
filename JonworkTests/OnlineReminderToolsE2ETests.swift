@@ -13,7 +13,7 @@ import Testing
 /// real EventKit. Tool outputs are stubbed with placeholder strings.
 @Suite(.serialized)
 struct OnlineReminderToolsE2ETests {
-    static let responseFormats = OnlineE2ETestSupport.responseFormats
+    static let responseFormats = OnlineE2ETestSupport.responseFormats.map(\.rawValue)
 
     // MARK: Client factory
 
@@ -87,8 +87,9 @@ struct OnlineReminderToolsE2ETests {
 
     @Test(.enabled(if: OnlineE2ETestSupport.isEnabled), arguments: OnlineReminderToolsE2ETests.responseFormats)
     func `add_reminder schema yields a well-formed tool call`(
-        responseFormat: CloudModel.ResponseFormat,
+        responseFormat: String,
     ) async throws {
+        let responseFormat = try #require(CloudModel.ResponseFormat(rawValue: responseFormat))
         try #require(OnlineE2ETestSupport.isEnabled(for: responseFormat))
 
         let client = try makeClient(for: responseFormat)
@@ -123,8 +124,9 @@ struct OnlineReminderToolsE2ETests {
 
     @Test(.enabled(if: OnlineE2ETestSupport.isEnabled), arguments: OnlineReminderToolsE2ETests.responseFormats)
     func `query_reminders schema yields a well-formed tool call`(
-        responseFormat: CloudModel.ResponseFormat,
+        responseFormat: String,
     ) async throws {
+        let responseFormat = try #require(CloudModel.ResponseFormat(rawValue: responseFormat))
         try #require(OnlineE2ETestSupport.isEnabled(for: responseFormat))
 
         let client = try makeClient(for: responseFormat)
@@ -163,8 +165,9 @@ struct OnlineReminderToolsE2ETests {
 
     @Test(.enabled(if: OnlineE2ETestSupport.isEnabled), arguments: OnlineReminderToolsE2ETests.responseFormats)
     func `update_reminder schema includes clear flags and round-trips a clear request`(
-        responseFormat: CloudModel.ResponseFormat,
+        responseFormat: String,
     ) async throws {
+        let responseFormat = try #require(CloudModel.ResponseFormat(rawValue: responseFormat))
         try #require(OnlineE2ETestSupport.isEnabled(for: responseFormat))
 
         let client = try makeClient(for: responseFormat)
@@ -222,8 +225,9 @@ struct OnlineReminderToolsE2ETests {
 
     @Test(.enabled(if: OnlineE2ETestSupport.isEnabled), arguments: OnlineReminderToolsE2ETests.responseFormats)
     func `delete_reminder schema yields a well-formed tool call`(
-        responseFormat: CloudModel.ResponseFormat,
+        responseFormat: String,
     ) async throws {
+        let responseFormat = try #require(CloudModel.ResponseFormat(rawValue: responseFormat))
         try #require(OnlineE2ETestSupport.isEnabled(for: responseFormat))
 
         let client = try makeClient(for: responseFormat)
@@ -253,8 +257,9 @@ struct OnlineReminderToolsE2ETests {
 
     @Test(.enabled(if: OnlineE2ETestSupport.isEnabled), arguments: OnlineReminderToolsE2ETests.responseFormats)
     func `complete_reminder schema yields a well-formed tool call`(
-        responseFormat: CloudModel.ResponseFormat,
+        responseFormat: String,
     ) async throws {
+        let responseFormat = try #require(CloudModel.ResponseFormat(rawValue: responseFormat))
         try #require(OnlineE2ETestSupport.isEnabled(for: responseFormat))
 
         let client = try makeClient(for: responseFormat)
