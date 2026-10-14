@@ -8,9 +8,9 @@ while [[ ! -d .git ]] && [[ "$(pwd)" != "/" ]]; do
     cd ..
 done
 
-WORKSPACE="${WORKSPACE:-FlowDown.xcworkspace}"
-SCHEME="${SCHEME:-FlowDown}"
-WORKSPACE_RESOLVED="FlowDown.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+WORKSPACE="${WORKSPACE:-Jonwork.xcworkspace}"
+SCHEME="${SCHEME:-Jonwork}"
+WORKSPACE_RESOLVED="Jonwork.xcworkspace/xcshareddata/swiftpm/Package.resolved"
 PACKAGE_RESOLVED_FILES=(
     Frameworks/*/Package.resolved
 )

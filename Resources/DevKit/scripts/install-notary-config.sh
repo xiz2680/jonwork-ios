@@ -30,7 +30,7 @@ PROFILE_NAME="$NOTARY_PROVISION_PROFILE_NAME"
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(cd "$SCRIPT_DIR/../../.." && pwd)
-CONFIG_PATH="${PROJECT_ROOT}/FlowDown/Configuration/Developer.xcconfig"
+CONFIG_PATH="${PROJECT_ROOT}/Jonwork/Configuration/Developer.xcconfig"
 
 log "profile name: ${PROFILE_NAME}"
 log "profile specifier: ${PROVISIONING_PROFILE_SPECIFIER}"

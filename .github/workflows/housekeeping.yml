@@ -109,7 +109,7 @@ jobs:
           ALLOW_DIRTY=1 Resources/DevKit/scripts/scan.license.sh
 
           # check if license file changed
-          if git diff --quiet FlowDown/BundledResources/OpenSourceLicenses.md; then
+          if git diff --quiet Jonwork/BundledResources/OpenSourceLicenses.md; then
             echo "has_license_updates=false" >> "$GITHUB_OUTPUT"
             echo "[+] licenses unchanged"
           else
@@ -128,8 +128,8 @@ jobs:
       - name: Disable CloudKit for CI Testing
         if: steps.check.outputs.has_updates == 'true' || steps.licenses.outputs.has_license_updates == 'true'
         run: |
-          echo '' >> FlowDown/Configuration/DevelopmentDeveloper.xcconfig
-          echo 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) TEST_SIMULATOR_DISABLE_CLOUD_KIT' >> FlowDown/Configuration/DevelopmentDeveloper.xcconfig
+          echo '' >> Jonwork/Configuration/DevelopmentDeveloper.xcconfig
+          echo 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) TEST_SIMULATOR_DISABLE_CLOUD_KIT' >> Jonwork/Configuration/DevelopmentDeveloper.xcconfig
 
       - name: Build (iOS)
         if: steps.check.outputs.has_updates == 'true' || steps.licenses.outputs.has_license_updates == 'true'
@@ -143,7 +143,7 @@ jobs:
 
       - name: Remove CI-only Config
         if: steps.check.outputs.has_updates == 'true' || steps.licenses.outputs.has_license_updates == 'true'
-        run: rm -f FlowDown/Configuration/DevelopmentDeveloper.xcconfig
+        run: rm -f Jonwork/Configuration/DevelopmentDeveloper.xcconfig
 
       - name: Create Pull Request
         if: steps.check.outputs.has_updates == 'true' || steps.licenses.outputs.has_license_updates == 'true'

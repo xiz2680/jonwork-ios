@@ -6,7 +6,7 @@ while [[ ! -d .git ]] && [[ "$(pwd)" != "/" ]]; do
     cd ..
 done
 
-if [[ -d .git ]] && [[ -d FlowDown.xcworkspace ]]; then
+if [[ -d .git ]] && [[ -d Jonwork.xcworkspace ]]; then
     echo "[*] found project root: $(pwd)"
 else
     echo "[!] could not find project root"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Shared helpers for FlowDown localization maintenance scripts.
+Shared helpers for Jonwork localization maintenance scripts.
 
 These utilities keep the behavior between our translation scripts consistent
 and remove duplication across per-locale entrypoints.
@@ -16,14 +16,14 @@ DEFAULT_KEEP_LANGUAGES = {"ja", "de", "fr", "es", "ko", "zh-Hans"}
 
 
 def default_file_path() -> str:
-    """Return the absolute path to FlowDown/Resources/Localizable.xcstrings."""
+    """Return the absolute path to Jonwork/Resources/Localizable.xcstrings."""
     return os.path.abspath(
         os.path.join(
             os.path.dirname(__file__),
             "..",
             "..",
             "..",
-            "FlowDown",
+            "Jonwork",
             "Resources",
             "Localizable.xcstrings",
         )

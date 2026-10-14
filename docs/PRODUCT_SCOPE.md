@@ -1,5 +1,13 @@
 # Pi iOS Product Scope
 
+## Approved XIZ-134 Home scope
+
+Linear XIZ-134's top latest execution requirements supersede the historical Pi-only first-release exclusions below. The current product target is the actual authenticated Jonwork Home conversation backed by DeepTutor, including chat/research/visualize, permission-filtered references, images/documents, authoritative message branches and actions, notebook/export/results/clarification/usage, account and identity flows, and native accessibility/draft/pin extensions. Pi Mobile is not the parity baseline. See `conversation-feature-matrix.md` for existing, conditional, native-extension and missing-contract classifications.
+
+Use the approved six-state reference: history, chat, add/reference, activity/results, settings, and settings/model-and-AI. All model/thinking/default/current-session configuration belongs only in settings. Reuse UIKit, existing timeline/Markdown/editor/pickers/previews/settings and preserve native transitions, gestures, keyboard/stream/scroll/stop behavior, haptics and Reduce Motion. A missing safe backend operation remains an explicit blocker; hiding its control does not complete parity.
+
+Independent initial and final native evidence is required. API/fixture success and historical tests do not establish current device acceptance. Physical-device and simulator evidence remain separate. XIZ-134 does not authorize an App Store submission.
+
 ## Product Position
 
 Pi iOS is a native control surface for Pi agent sessions. Its product promise is a calm, premium, trustworthy conversation experience for professional work. FlowDown provides the interaction and rendering foundation; Pi remains the only agent backend.
@@ -57,7 +65,7 @@ Pi iOS is a native control surface for Pi agent sessions. Its product promise is
 | Model controls | existing model controls | Adapt to Pi model registry; remove provider editing |
 | Web search and FlowDown tools | FlowDown-specific managers | Remove from product surface; Pi tools are authoritative |
 | Local MLX model download | local model controllers | Exclude from first release |
-| iCloud conversation sync | FlowDown storage/sync | Exclude; Pi session files are authoritative |
+| iCloud conversation sync | Jonwork storage/sync | Exclude; Pi session files are authoritative |
 
 ## Visual Quality Bar
 

@@ -90,8 +90,8 @@ xcodebuild -downloadComponent MetalToolchain > /dev/null
 DESTINATION=$(./Resources/DevKit/scripts/get_first_ios_simulator.sh)
 
 XCBUILD_LABEL=test-online-e2e ./Resources/DevKit/scripts/run_xcodebuild.sh \
-  -workspace FlowDown.xcworkspace \
-  -scheme FlowDown \
+  -workspace Jonwork.xcworkspace \
+  -scheme Jonwork \
   -configuration Debug \
   -destination "$DESTINATION" \
   test \

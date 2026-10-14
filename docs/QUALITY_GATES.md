@@ -3,7 +3,7 @@
 ## Gate 1: Requirement Ready
 
 - Linear issue has user outcome, scope, non-goals, acceptance criteria, design evidence, dependencies, and rollback.
-- Existing FlowDown reuse decision is documented.
+- Existing Jonwork reuse decision is documented.
 - Pi contract change, if any, is versioned and linked.
 - Privacy, entitlement, data retention, and App Store review impact are identified.
 
@@ -17,10 +17,10 @@
 ## Gate 3: Implementation Ready
 
 - Pi transport is isolated from UIKit behind testable protocols.
-- Existing FlowDown components are reused when available.
+- Existing Jonwork components are reused when available.
 - New state transitions have unit tests and replay fixtures.
 - Errors are typed and user-facing recovery is actionable.
-- No secrets, proprietary FlowDown brand assets, or user data enter source control.
+- No secrets, proprietary Jonwork brand assets, or user data enter source control.
 
 ## Gate 4: Continuous Integration
 

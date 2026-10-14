@@ -1,0 +1,68 @@
+{
+  "contract": "jonwork-home/1.0",
+  "identity": {
+    "subject": "fixture-main-user",
+    "scopeType": "enterprise",
+    "scopeId": "fixture-enterprise",
+    "workspaceId": "fixture-workspace",
+    "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "session": {
+    "id": "fixture-session",
+    "session_id": "fixture-session",
+    "title": "Fixture branch/result roundtrip",
+    "status": "completed",
+    "preferences": {
+      "selected_branches": {
+        "null": 2
+      },
+      "capability": "visualize"
+    },
+    "active_turns": [],
+    "messages": [
+      {
+        "id": 1,
+        "role": "user",
+        "content": "Original fixture question",
+        "parent_message_id": null,
+        "created_at": 1.0
+      },
+      {
+        "id": 2,
+        "role": "user",
+        "content": "Edited fixture question",
+        "parent_message_id": null,
+        "created_at": 2.0
+      },
+      {
+        "id": 3,
+        "role": "assistant",
+        "content": "Fixture graph",
+        "parent_message_id": 2,
+        "capability": "visualize",
+        "created_at": 3.0,
+        "events": [
+          {
+            "type": "result",
+            "source": "visualize",
+            "stage": "generating",
+            "content": "",
+            "metadata": {
+              "response": {
+                "mermaid": "graph TD; A-->B"
+              },
+              "metadata": {
+                "cost_summary": {
+                  "total_tokens": 19,
+                  "total_calls": 1
+                }
+              }
+            },
+            "turn_id": "fixture-turn",
+            "timestamp": 3.0
+          }
+        ]
+      }
+    ]
+  }
+}

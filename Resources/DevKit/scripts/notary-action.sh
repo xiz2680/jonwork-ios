@@ -17,9 +17,9 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(cd "$SCRIPT_DIR/../../.." && pwd)
 cd "$PROJECT_ROOT"
 
-ARCHIVE_PATH="${PROJECT_ROOT}/BuildArtifacts/FlowDown-macos.xcarchive"
+ARCHIVE_PATH="${PROJECT_ROOT}/BuildArtifacts/Jonwork-macos.xcarchive"
 RESULT_BUNDLE="${PROJECT_ROOT}/BuildArtifacts/macos-notary.xcresult"
-APP_PATH="${ARCHIVE_PATH}/Products/Applications/FlowDown.app"
+APP_PATH="${ARCHIVE_PATH}/Products/Applications/Jonwork.app"
 ZIP_OUTPUT="${NOTARIZE_ZIP_OUTPUT:?NOTARIZE_ZIP_OUTPUT is required}"
 
 if [[ -z "${ENABLE_NOTARIZE:-}" ]]; then

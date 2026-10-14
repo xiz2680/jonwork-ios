@@ -1,0 +1,1 @@
+../Jonwork/Backend/LiveActivity/WidgetsAttributes.swift

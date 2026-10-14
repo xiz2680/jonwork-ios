@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Archives FlowDown macOS (Catalyst) with xcbeautify output.
+# Archives Jonwork macOS (Catalyst) with xcbeautify output.
 # Expects signing to be performed during archive.
 # Env:
 #   CODE_SIGNING_IDENTITY (required)
@@ -19,12 +19,12 @@ else
 fi
 
 SEARCH_ROOT="$PROJECT_ROOT"
-while [[ "$SEARCH_ROOT" != "/" && ! -e "$SEARCH_ROOT/FlowDown.xcworkspace" ]]; do
+while [[ "$SEARCH_ROOT" != "/" && ! -e "$SEARCH_ROOT/Jonwork.xcworkspace" ]]; do
   SEARCH_ROOT=$(dirname "$SEARCH_ROOT")
 done
 
-if [[ ! -e "$SEARCH_ROOT/FlowDown.xcworkspace" ]]; then
-  echo "[-] FlowDown.xcworkspace not found from $SCRIPT_DIR" >&2
+if [[ ! -e "$SEARCH_ROOT/Jonwork.xcworkspace" ]]; then
+  echo "[-] Jonwork.xcworkspace not found from $SCRIPT_DIR" >&2
   exit 1
 fi
 
@@ -32,9 +32,9 @@ PROJECT_ROOT="$SEARCH_ROOT"
 
 cd "$PROJECT_ROOT"
 
-WORKSPACE="FlowDown.xcworkspace"
-SCHEME="FlowDown"
-ARCHIVE_PATH="${PROJECT_ROOT}/BuildArtifacts/FlowDown-macos.xcarchive"
+WORKSPACE="Jonwork.xcworkspace"
+SCHEME="Jonwork"
+ARCHIVE_PATH="${PROJECT_ROOT}/BuildArtifacts/Jonwork-macos.xcarchive"
 RESULT_BUNDLE="${PROJECT_ROOT}/BuildArtifacts/macos-notary.xcresult"
 
 mkdir -p "${PROJECT_ROOT}/BuildArtifacts"

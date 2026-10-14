@@ -73,6 +73,11 @@
 .yarn/unplugged
 /*.gcno
 Artifacts/
+/BuildArtifacts/
+*.xcarchive/
+*.xcresult/
+*.mobileprovision
+*.p12
 CI
 CI-Pods.tar
 Carthage/Build
@@ -117,10 +122,10 @@ xcuserdata/
 yarn-debug.log*
 yarn-error.log*
 
-FlowDown/Configuration/*Developer*.xcconfig
-FlowDown/Configuration/GitHubAction.xcconfig
-FlowDown/DerivedSources/*
-!FlowDown/DerivedSources/DerivedSourcesReadme.swift
+Jonwork/Configuration/*Developer*.xcconfig
+Jonwork/Configuration/GitHubAction.xcconfig
+Jonwork/DerivedSources/*
+!Jonwork/DerivedSources/DerivedSourcesReadme.swift
 
 /example*
 /References

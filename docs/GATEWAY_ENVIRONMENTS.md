@@ -4,23 +4,23 @@ Jonwork selects its Gateway at build time. There is no runtime server-address fi
 
 | Xcode configuration | Deployment label | Gateway |
 |---|---|---|
-| `Debug` | `debug` | `https://debug.agent.jonwork.com` |
+| `Debug` | `debug` | `https://jonwork.com` |
 | `QA` | `qa` | `https://qa.agent.jonwork.com` |
 | `ProductionCandidate` | `production-candidate` | `https://candidate.agent.jonwork.com` |
-| `Release` | `production` | `https://agent.jonwork.com` |
+| `Release` | `production` | `https://jonwork.com` |
 
-The environment and URL are supplied by the checked-in xcconfig files and embedded in the app Info.plist. Runtime validation requires HTTPS and an exact environment-to-domain match. These files contain no OAuth client secret, bearer token, model credential, or signing credential.
+The environment and URL are supplied by the checked-in xcconfig files and embedded in the app Info.plist. Runtime validation requires HTTPS and an exact environment-to-domain match. Per the user request, Debug and Release both connect directly to jonwork.com; QA and ProductionCandidate retain their dedicated endpoints. These files contain no OAuth client secret, bearer token, model credential, or signing credential.
 
 ## Reproduce a fresh candidate install
 
 Use a booted simulator. The uninstall step intentionally clears the app container. iOS may retain Keychain items after uninstall, but Gateway selection does not read a credential without a matching current-environment profile, so residual credentials cannot change the selected domain.
 
 ```sh
-cd /Users/a/xz-workspace/jonwork2.0/FlowDown
+cd /Users/a/xz-workspace/jonwork2.0/Jonwork
 make build-ios-simulator CONFIGURATION=ProductionCandidate DERIVED_DATA=/private/tmp/jonwork-candidate-deriveddata
-plutil -p /private/tmp/jonwork-candidate-deriveddata/Build/Products/ProductionCandidate-iphonesimulator/FlowDown.app/Info.plist | grep JonworkGateway
+plutil -p /private/tmp/jonwork-candidate-deriveddata/Build/Products/ProductionCandidate-iphonesimulator/Jonwork.app/Info.plist | grep JonworkGateway
 xcrun simctl uninstall booted com.jonwork.ios || true
-xcrun simctl install booted /private/tmp/jonwork-candidate-deriveddata/Build/Products/ProductionCandidate-iphonesimulator/FlowDown.app
+xcrun simctl install booted /private/tmp/jonwork-candidate-deriveddata/Build/Products/ProductionCandidate-iphonesimulator/Jonwork.app
 xcrun simctl launch booted com.jonwork.ios
 ```
 
@@ -30,7 +30,7 @@ To verify production isolation, build to a separate derived-data directory and i
 
 ```sh
 make build-ios-simulator CONFIGURATION=Release DERIVED_DATA=/private/tmp/jonwork-production-deriveddata
-plutil -p /private/tmp/jonwork-production-deriveddata/Build/Products/Release-iphonesimulator/FlowDown.app/Info.plist | grep JonworkGateway
+plutil -p /private/tmp/jonwork-production-deriveddata/Build/Products/Release-iphonesimulator/Jonwork.app/Info.plist | grep JonworkGateway
 ```
 
-The production plist must show `production` and `https://agent.jonwork.com`; it must not contain the candidate hostname.
+The production plist must show `production` and `https://jonwork.com`; it must not contain the candidate hostname.

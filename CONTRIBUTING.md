@@ -59,7 +59,7 @@ In scope:
 
 Out of scope unless a Linear requirement adds it:
 
-- generic multi-provider configuration inherited from FlowDown;
+- generic multi-provider configuration inherited from Jonwork;
 - local MLX model management;
 - FlowDown-specific cloud services, branding, subscriptions, or artwork;
 - features that duplicate Pi server capabilities;

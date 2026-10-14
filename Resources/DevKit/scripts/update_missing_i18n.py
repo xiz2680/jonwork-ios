@@ -165,7 +165,1353 @@ NEW_STRINGS: dict[str, dict[str, str]] = {
     "Restoring conversation…": {"de": "Unterhaltung wird wiederhergestellt…", "es": "Restaurando conversación…", "fr": "Restauration de la conversation…", "ja": "会話を復元中…", "ko": "대화 복원 중…", "zh-Hans": "正在恢复对话…"},
     "Delete Conversation?": {"de": "Unterhaltung löschen?", "es": "¿Eliminar conversación?", "fr": "Supprimer la conversation ?", "ja": "会話を削除しますか？", "ko": "대화를 삭제할까요?", "zh-Hans": "删除对话？"},
     "This permanently deletes the conversation from the server.": {"de": "Dadurch wird die Unterhaltung dauerhaft vom Server gelöscht.", "es": "Esto elimina permanentemente la conversación del servidor.", "fr": "Cette action supprime définitivement la conversation du serveur.", "ja": "サーバーから会話が完全に削除されます。", "ko": "서버에서 대화가 영구적으로 삭제됩니다.", "zh-Hans": "这将从服务器永久删除该对话。"},
+    "Compact Context": {"de": "Kontext komprimieren", "es": "Compactar contexto", "fr": "Compacter le contexte", "ja": "コンテキストを圧縮", "ko": "컨텍스트 압축", "zh-Hans": "压缩上下文"},
+    "Summarize earlier context to make room for the next messages. The conversation stays available.": {"de": "Fassen Sie den bisherigen Kontext zusammen, um Platz für weitere Nachrichten zu schaffen. Die Unterhaltung bleibt verfügbar.", "es": "Resume el contexto anterior para dejar espacio a los próximos mensajes. La conversación sigue disponible.", "fr": "Résumez le contexte précédent pour laisser de la place aux prochains messages. La conversation reste disponible.", "ja": "以前のコンテキストを要約して、次のメッセージのための領域を確保します。会話は引き続き利用できます。", "ko": "이전 컨텍스트를 요약하여 다음 메시지를 위한 공간을 확보합니다. 대화는 계속 이용할 수 있습니다.", "zh-Hans": "概括先前的上下文，为后续消息腾出空间。会话仍然可用。"},
+    "Sign In with Jonwork": {
+        "de": "Mit Jonwork anmelden",
+        "es": "Iniciar sesión con Jonwork",
+        "fr": "Se connecter avec Jonwork",
+        "ja": "Jonworkでサインイン",
+        "ko": "Jonwork로 로그인",
+        "zh-Hans": "使用 Jonwork 登录",
+    },
+    "Sign in securely on jonwork.com. Then return here to continue your conversations.": {
+        "de": "Melden Sie sich sicher auf jonwork.com an. Kehren Sie anschließend hierher zurück, um Ihre Unterhaltungen fortzusetzen.",
+        "es": "Inicia sesión de forma segura en jonwork.com. Después vuelve aquí para continuar tus conversaciones.",
+        "fr": "Connectez-vous en toute sécurité sur jonwork.com. Revenez ensuite ici pour poursuivre vos conversations.",
+        "ja": "jonwork.comで安全にサインインし、ここに戻って会話を続けます。",
+        "ko": "jonwork.com에서 안전하게 로그인한 다음 여기로 돌아와 대화를 계속하세요.",
+        "zh-Hans": "在 jonwork.com 安全登录，然后返回这里继续会话。",
+    },
+    "The email or password is incorrect.": {
+        "de": "E-Mail-Adresse oder Passwort ist falsch.",
+        "es": "El correo electrónico o la contraseña son incorrectos.",
+        "fr": "L’adresse e-mail ou le mot de passe est incorrect.",
+        "ja": "メールアドレスまたはパスワードが正しくありません。",
+        "ko": "이메일 또는 비밀번호가 올바르지 않습니다.",
+        "zh-Hans": "邮箱或密码错误。",
+    },
+    "JONWORK MOBILE": {
+        "de": "JONWORK MOBIL",
+        "es": "JONWORK MÓVIL",
+        "fr": "JONWORK MOBILE",
+        "ja": "JONWORK モバイル",
+        "ko": "JONWORK 모바일",
+        "zh-Hans": "JONWORK 移动端",
+    },
+    "Your workspace, ready when you are.": {
+        "de": "Ihr Arbeitsbereich ist bereit, wenn Sie es sind.",
+        "es": "Tu espacio de trabajo, listo cuando tú lo estés.",
+        "fr": "Votre espace de travail, prêt quand vous l’êtes.",
+        "ja": "いつでも使える、あなたのワークスペース。",
+        "ko": "언제든 준비된 나의 작업 공간.",
+        "zh-Hans": "你的工作区，随时就绪。",
+    },
+    "The Jonwork service for this build is unavailable. Please try again after the gateway is online.": {
+        "de": "Der Jonwork-Dienst für diesen Build ist nicht verfügbar. Versuchen Sie es erneut, sobald das Gateway online ist.",
+        "es": "El servicio de Jonwork para esta compilación no está disponible. Inténtalo de nuevo cuando la puerta de enlace esté activa.",
+        "fr": "Le service Jonwork de cette version est indisponible. Réessayez lorsque la passerelle sera en ligne.",
+        "ja": "このビルド用の Jonwork サービスは利用できません。ゲートウェイがオンラインになってから再試行してください。",
+        "ko": "이 빌드의 Jonwork 서비스를 사용할 수 없습니다. 게이트웨이가 온라인 상태가 된 후 다시 시도하세요.",
+        "zh-Hans": "当前版本连接的 Jonwork 服务尚不可用，请等待网关上线后重试。",
+    },
+    "This Jonwork server does not support iOS conversations yet. Please update the gateway and try again.": {
+        "de": "Dieser Jonwork-Server unterstützt noch keine iOS-Unterhaltungen. Aktualisieren Sie das Gateway und versuchen Sie es erneut.",
+        "es": "Este servidor de Jonwork todavía no admite conversaciones de iOS. Actualiza la puerta de enlace e inténtalo de nuevo.",
+        "fr": "Ce serveur Jonwork ne prend pas encore en charge les conversations iOS. Mettez à jour la passerelle, puis réessayez.",
+        "ja": "この Jonwork サーバーはまだ iOS の会話に対応していません。ゲートウェイを更新してから再試行してください。",
+        "ko": "이 Jonwork 서버는 아직 iOS 대화를 지원하지 않습니다. 게이트웨이를 업데이트한 후 다시 시도하세요.",
+        "zh-Hans": "当前 Jonwork 服务尚未支持 iOS 会话，请更新网关后重试。",
+    },
+    "Use the same Jonwork account as the web app. Your projects and conversation permissions stay in sync.": {
+        "de": "Verwenden Sie dasselbe Jonwork-Konto wie in der Web-App. Ihre Projekte und Unterhaltungsberechtigungen bleiben synchron.",
+        "es": "Usa la misma cuenta de Jonwork que en la aplicación web. Tus proyectos y permisos de conversación se mantienen sincronizados.",
+        "fr": "Utilisez le même compte Jonwork que dans l’application web. Vos projets et autorisations de conversation restent synchronisés.",
+        "ja": "Webアプリと同じJonworkアカウントを使用します。プロジェクトと会話の権限は同期されます。",
+        "ko": "웹 앱과 동일한 Jonwork 계정을 사용하세요. 프로젝트와 대화 권한이 동기화됩니다.",
+        "zh-Hans": "使用与网页版相同的 Jonwork 账号，项目和会话权限保持同步。",
+    },
+    "Your password is sent only to Jonwork for this sign-in and is never saved on this device.": {
+        "de": "Ihr Passwort wird nur für diese Anmeldung an Jonwork gesendet und niemals auf diesem Gerät gespeichert.",
+        "es": "Tu contraseña solo se envía a Jonwork para este inicio de sesión y nunca se guarda en este dispositivo.",
+        "fr": "Votre mot de passe est envoyé à Jonwork uniquement pour cette connexion et n’est jamais enregistré sur cet appareil.",
+        "ja": "パスワードは今回のサインインのためだけにJonworkへ送信され、このデバイスには保存されません。",
+        "ko": "비밀번호는 이번 로그인을 위해서만 Jonwork로 전송되며 이 기기에 저장되지 않습니다.",
+        "zh-Hans": "密码仅在本次登录时发送给 Jonwork，绝不会保存在此设备上。",
+    },
+    "Email": {
+        "de": "E-Mail",
+        "es": "Correo electrónico",
+        "fr": "Adresse e-mail",
+        "ja": "メールアドレス",
+        "ko": "이메일",
+        "zh-Hans": "邮箱",
+    },
+    "Password": {
+        "de": "Passwort",
+        "es": "Contraseña",
+        "fr": "Mot de passe",
+        "ja": "パスワード",
+        "ko": "비밀번호",
+        "zh-Hans": "密码",
+    },
+    "Show Password": {
+        "de": "Passwort anzeigen",
+        "es": "Mostrar contraseña",
+        "fr": "Afficher le mot de passe",
+        "ja": "パスワードを表示",
+        "ko": "비밀번호 표시",
+        "zh-Hans": "显示密码",
+    },
+    "Hide Password": {
+        "de": "Passwort ausblenden",
+        "es": "Ocultar contraseña",
+        "fr": "Masquer le mot de passe",
+        "ja": "パスワードを隠す",
+        "ko": "비밀번호 숨기기",
+        "zh-Hans": "隐藏密码",
+    },
+    "Enter a valid email and a password with at least 8 characters.": {
+        "de": "Geben Sie eine gültige E-Mail-Adresse und ein Passwort mit mindestens 8 Zeichen ein.",
+        "es": "Introduce un correo válido y una contraseña de al menos 8 caracteres.",
+        "fr": "Saisissez une adresse e-mail valide et un mot de passe d’au moins 8 caractères.",
+        "ja": "有効なメールアドレスと8文字以上のパスワードを入力してください。",
+        "ko": "올바른 이메일과 8자 이상의 비밀번호를 입력하세요.",
+        "zh-Hans": "请输入有效邮箱和至少 8 个字符的密码。",
+    },
+    "Welcome to Jonwork": {
+        "de": "Willkommen bei Jonwork",
+        "es": "Te damos la bienvenida a Jonwork",
+        "fr": "Bienvenue sur Jonwork",
+        "ja": "Jonworkへようこそ",
+        "ko": "Jonwork에 오신 것을 환영합니다",
+        "zh-Hans": "欢迎使用 Jonwork",
+    },
+    "A QUIETER WAY TO WORK": {
+        "de": "RUHIGER ARBEITEN",
+        "es": "UNA FORMA MÁS TRANQUILA DE TRABAJAR",
+        "fr": "UNE FAÇON PLUS SEREINE DE TRAVAILLER",
+        "ja": "もっと穏やかな働き方",
+        "ko": "더 차분하게 일하는 방법",
+        "zh-Hans": "更从容的工作方式",
+    },
+    "Meet your": {
+        "de": "Lernen Sie Ihren",
+        "es": "Conoce a tu",
+        "fr": "Découvrez votre",
+        "ja": "あなたの",
+        "ko": "나만의",
+        "zh-Hans": "遇见你的",
+    },
+    "Jonwork copilot": {
+        "de": "Jonwork-Copiloten kennen",
+        "es": "copiloto Jonwork",
+        "fr": "copilote Jonwork",
+        "ja": "Jonworkコパイロット",
+        "ko": "Jonwork 코파일럿",
+        "zh-Hans": "Jonwork 智能搭档",
+    },
+    "A focused native workspace for thoughtful conversations, live progress, and real work.": {
+        "de": "Ein fokussierter nativer Arbeitsbereich für durchdachte Unterhaltungen, Live-Fortschritt und echte Arbeit.",
+        "es": "Un espacio nativo y enfocado para conversaciones útiles, progreso en directo y trabajo real.",
+        "fr": "Un espace natif et ciblé pour des conversations réfléchies, une progression en direct et du travail concret.",
+        "ja": "思慮深い会話、ライブ進捗、実務に集中できるネイティブワークスペースです。",
+        "ko": "깊이 있는 대화, 실시간 진행 상황, 실제 업무에 집중하는 네이티브 작업 공간입니다.",
+        "zh-Hans": "一个专注的原生工作区，承载深度对话、实时进展与真实工作。",
+    },
+    "Start with a conversation, not setup.": {
+        "de": "Beginnen Sie mit einer Unterhaltung, nicht mit der Einrichtung.",
+        "es": "Empieza con una conversación, no con la configuración.",
+        "fr": "Commencez par une conversation, pas par la configuration.",
+        "ja": "設定ではなく、会話から始められます。",
+        "ko": "설정이 아닌 대화로 시작하세요.",
+        "zh-Hans": "从会话开始，而不是从配置开始。",
+    },
+    "Designed for clarity in light and dark mode.": {
+        "de": "Für Klarheit im hellen und dunklen Modus gestaltet.",
+        "es": "Diseñado para verse con claridad en modo claro y oscuro.",
+        "fr": "Conçu pour rester clair en mode clair comme sombre.",
+        "ja": "ライト・ダークの両モードで見やすく設計されています。",
+        "ko": "라이트 및 다크 모드 모두에서 선명하도록 설계되었습니다.",
+        "zh-Hans": "明暗模式下都清晰舒适。",
+    },
+    "LIVE, WITHOUT THE NOISE": {
+        "de": "LIVE, OHNE ABLENKUNG",
+        "es": "EN DIRECTO, SIN RUIDO",
+        "fr": "EN DIRECT, SANS DISTRACTION",
+        "ja": "ノイズのないライブ体験",
+        "ko": "방해 없이 실시간으로",
+        "zh-Hans": "实时，但不嘈杂",
+    },
+    "Stay with the": {
+        "de": "Bleiben Sie bei der",
+        "es": "Sigue el",
+        "fr": "Suivez le",
+        "ja": "進行中の",
+        "ko": "진행 중인",
+        "zh-Hans": "始终跟上",
+    },
+    "work in motion": {
+        "de": "Arbeit in Bewegung",
+        "es": "trabajo en marcha",
+        "fr": "travail en cours",
+        "ja": "仕事を見守る",
+        "ko": "업무의 흐름",
+        "zh-Hans": "工作进程",
+    },
+    "Follow streaming answers, reasoning, and tool activity in one stable timeline—without losing your place.": {
+        "de": "Verfolgen Sie gestreamte Antworten, Überlegungen und Werkzeugaktivitäten in einer stabilen Zeitleiste, ohne die Orientierung zu verlieren.",
+        "es": "Sigue respuestas en tiempo real, razonamiento y actividad de herramientas en una cronología estable, sin perder el hilo.",
+        "fr": "Suivez les réponses en continu, le raisonnement et les outils dans une chronologie stable, sans perdre le fil.",
+        "ja": "ストリーミング回答、推論、ツールの動きを、位置を失わず安定したタイムラインで確認できます。",
+        "ko": "스트리밍 답변, 추론, 도구 활동을 위치를 잃지 않고 안정적인 타임라인에서 확인하세요.",
+        "zh-Hans": "在稳定的时间线中跟随流式回答、推理和工具活动，始终不丢失当前位置。",
+    },
+    "Steer, follow up, stop, and resume safely.": {
+        "de": "Sicher steuern, nachfragen, stoppen und fortsetzen.",
+        "es": "Orienta, continúa, detén y reanuda con seguridad.",
+        "fr": "Guidez, relancez, arrêtez et reprenez en toute sécurité.",
+        "ja": "安全に誘導、フォローアップ、停止、再開できます。",
+        "ko": "안전하게 조정하고, 후속 요청하고, 중지하고, 재개하세요.",
+        "zh-Hans": "安全地引导、追问、停止和恢复。",
+    },
+    "Markdown, code, images, and tools feel native.": {
+        "de": "Markdown, Code, Bilder und Werkzeuge fühlen sich nativ an.",
+        "es": "Markdown, código, imágenes y herramientas se sienten nativos.",
+        "fr": "Markdown, code, images et outils s’intègrent naturellement.",
+        "ja": "Markdown、コード、画像、ツールをネイティブに扱えます。",
+        "ko": "Markdown, 코드, 이미지, 도구가 네이티브처럼 자연스럽습니다.",
+        "zh-Hans": "Markdown、代码、图片和工具都拥有原生体验。",
+    },
+    "YOUR JONWORK ACCESS": {
+        "de": "IHR JONWORK-ZUGANG",
+        "es": "TU ACCESO A JONWORK",
+        "fr": "VOTRE ACCÈS JONWORK",
+        "ja": "JONWORKアクセス",
+        "ko": "JONWORK 접근 권한",
+        "zh-Hans": "你的 JONWORK 权限",
+    },
+    "Secure by": {
+        "de": "Sicher durch",
+        "es": "Seguro por",
+        "fr": "Sécurisé par",
+        "ja": "安全性を",
+        "ko": "보안을 고려한",
+        "zh-Hans": "安全源于",
+    },
+    "design": {
+        "de": "Design",
+        "es": "diseño",
+        "fr": "conception",
+        "ja": "設計から",
+        "ko": "설계",
+        "zh-Hans": "精心设计",
+    },
+    "Sign in with the same Jonwork account. Your approved projects and conversations are ready automatically.": {
+        "de": "Melden Sie sich mit demselben Jonwork-Konto an. Ihre freigegebenen Projekte und Unterhaltungen stehen automatisch bereit.",
+        "es": "Inicia sesión con la misma cuenta de Jonwork. Tus proyectos y conversaciones autorizados estarán listos automáticamente.",
+        "fr": "Connectez-vous avec le même compte Jonwork. Vos projets et conversations autorisés sont automatiquement disponibles.",
+        "ja": "同じJonworkアカウントでサインインすると、承認済みのプロジェクトと会話が自動的に用意されます。",
+        "ko": "동일한 Jonwork 계정으로 로그인하면 승인된 프로젝트와 대화가 자동으로 준비됩니다.",
+        "zh-Hans": "使用同一个 Jonwork 账号登录，已授权的项目和会话会自动就绪。",
+    },
+    "Passwords are never stored on this device.": {
+        "de": "Passwörter werden niemals auf diesem Gerät gespeichert.",
+        "es": "Las contraseñas nunca se guardan en este dispositivo.",
+        "fr": "Les mots de passe ne sont jamais enregistrés sur cet appareil.",
+        "ja": "パスワードはこのデバイスに保存されません。",
+        "ko": "비밀번호는 이 기기에 저장되지 않습니다.",
+        "zh-Hans": "密码绝不会保存在此设备上。",
+    },
+    "Session tokens stay protected in Keychain.": {
+        "de": "Sitzungstoken bleiben im Schlüsselbund geschützt.",
+        "es": "Los tokens de sesión permanecen protegidos en el llavero.",
+        "fr": "Les jetons de session restent protégés dans le trousseau.",
+        "ja": "セッショントークンはキーチェーンで保護されます。",
+        "ko": "세션 토큰은 키체인에서 안전하게 보호됩니다.",
+        "zh-Hans": "会话令牌受钥匙串保护。",
+    },
+    "Continue with Jonwork": {
+        "de": "Mit Jonwork fortfahren",
+        "es": "Continuar con Jonwork",
+        "fr": "Continuer avec Jonwork",
+        "ja": "Jonwork で続ける",
+        "ko": "Jonwork로 계속하기",
+        "zh-Hans": "继续使用 Jonwork",
+    },
+    "Sign in with your web account. Projects and conversations stay in sync.": {
+        "de": "Melden Sie sich mit Ihrem Webkonto an. Projekte und Unterhaltungen bleiben synchron.",
+        "es": "Inicia sesión con tu cuenta web. Los proyectos y las conversaciones se mantienen sincronizados.",
+        "fr": "Connectez-vous avec votre compte web. Vos projets et conversations restent synchronisés.",
+        "ja": "Web アカウントでサインインすると、プロジェクトと会話が同期されます。",
+        "ko": "웹 계정으로 로그인하면 프로젝트와 대화가 동기화됩니다.",
+        "zh-Hans": "使用网页版账号登录，项目与会话保持同步。",
+    },
+    "Meet Jonwork": {
+        "de": "Jonwork kennenlernen",
+        "es": "Conoce Jonwork",
+        "fr": "Découvrez Jonwork",
+        "ja": "Jonwork へようこそ",
+        "ko": "Jonwork 만나기",
+        "zh-Hans": "遇见 Jonwork",
+    },
+    "Start with a conversation and stay focused on the work.": {
+        "de": "Beginnen Sie mit einem Gespräch und konzentrieren Sie sich auf die Arbeit.",
+        "es": "Empieza con una conversación y céntrate en el trabajo.",
+        "fr": "Commencez par une conversation et restez concentré sur votre travail.",
+        "ja": "会話から始めて、仕事に集中できます。",
+        "ko": "대화로 시작하고 업무에 집중하세요.",
+        "zh-Hans": "从会话开始，专注完成工作。",
+    },
+    "Work in motion": {
+        "de": "Arbeit in Bewegung",
+        "es": "Trabajo en marcha",
+        "fr": "Le travail en mouvement",
+        "ja": "進行中の仕事",
+        "ko": "진행 중인 작업",
+        "zh-Hans": "工作实时推进",
+    },
+    "Answers, reasoning, and tools stay together in one clear timeline.": {
+        "de": "Antworten, Überlegungen und Werkzeuge bleiben in einer klaren Zeitleiste zusammen.",
+        "es": "Las respuestas, el razonamiento y las herramientas permanecen juntos en una cronología clara.",
+        "fr": "Réponses, raisonnement et outils restent réunis dans une chronologie claire.",
+        "ja": "回答、推論、ツールを一つの見やすいタイムラインで確認できます。",
+        "ko": "답변, 추론, 도구가 하나의 명확한 타임라인에 함께 표시됩니다.",
+        "zh-Hans": "回答、推理和工具动态，集中在一条清晰时间线中。",
+    },
+    "Your workspace, ready": {
+        "de": "Ihr Arbeitsbereich ist bereit",
+        "es": "Tu espacio de trabajo, listo",
+        "fr": "Votre espace de travail est prêt",
+        "ja": "ワークスペースの準備完了",
+        "ko": "작업 공간 준비 완료",
+        "zh-Hans": "工作区，已就绪",
+    },
+    "Sign in once. Your approved projects and conversations appear automatically.": {
+        "de": "Einmal anmelden. Ihre freigegebenen Projekte und Unterhaltungen erscheinen automatisch.",
+        "es": "Inicia sesión una vez. Tus proyectos y conversaciones autorizados aparecerán automáticamente.",
+        "fr": "Connectez-vous une fois. Vos projets et conversations autorisés apparaissent automatiquement.",
+        "ja": "一度サインインすれば、許可されたプロジェクトと会話が自動的に表示されます。",
+        "ko": "한 번 로그인하면 승인된 프로젝트와 대화가 자동으로 표시됩니다.",
+        "zh-Hans": "登录一次，已授权的项目和会话会自动出现。",
+    },
+    "Move ideas forward": {
+        "de": "Ideen voranbringen",
+        "es": "Haz avanzar tus ideas",
+        "fr": "Faites avancer vos idées",
+        "ja": "アイデアを前へ",
+        "ko": "아이디어를 앞으로",
+        "zh-Hans": "把想法，推进到完成",
+    },
+    "Start with a conversation. Let the work move naturally.": {
+        "de": "Beginnen Sie mit einem Gespräch. Lassen Sie die Arbeit natürlich vorankommen.",
+        "es": "Empieza con una conversación. Deja que el trabajo avance con naturalidad.",
+        "fr": "Commencez par une conversation. Laissez le travail avancer naturellement.",
+        "ja": "会話から始めて、仕事を自然に前へ進めましょう。",
+        "ko": "대화로 시작해 일이 자연스럽게 앞으로 나아가게 하세요.",
+        "zh-Hans": "从对话开始，让工作自然向前。",
+    },
+    "Answers and tools, together in one clear timeline.": {
+        "de": "Antworten und Werkzeuge, gemeinsam in einer klaren Zeitleiste.",
+        "es": "Respuestas y herramientas, juntas en una cronología clara.",
+        "fr": "Réponses et outils, réunis dans une chronologie claire.",
+        "ja": "回答とツールを、一つの見やすいタイムラインに。",
+        "ko": "답변과 도구를 하나의 명확한 타임라인에 모았습니다.",
+        "zh-Hans": "回答与工具，都在一条清晰时间线里。",
+    },
+    "Sign in once. Approved work appears automatically.": {
+        "de": "Einmal anmelden. Freigegebene Arbeit erscheint automatisch.",
+        "es": "Inicia sesión una vez. El trabajo autorizado aparece automáticamente.",
+        "fr": "Connectez-vous une fois. Le travail autorisé apparaît automatiquement.",
+        "ja": "一度サインインすれば、許可された仕事が自動的に表示されます。",
+        "ko": "한 번 로그인하면 승인된 작업이 자동으로 표시됩니다.",
+        "zh-Hans": "登录一次，已授权的工作自动出现。",
+    },
+    "Continue your work and conversations.": {
+        "de": "Setzen Sie Ihre Arbeit und Unterhaltungen fort.",
+        "es": "Continúa con tu trabajo y tus conversaciones.",
+        "fr": "Poursuivez votre travail et vos conversations.",
+        "ja": "仕事と会話を続けましょう。",
+        "ko": "작업과 대화를 계속하세요.",
+        "zh-Hans": "继续你的工作与会话。",
+    },
+    "Sign In to Jonwork": {
+        "de": "Bei Jonwork anmelden",
+        "es": "Inicia sesión en Jonwork",
+        "fr": "Connectez-vous à Jonwork",
+        "ja": "Jonwork にサインイン",
+        "ko": "Jonwork에 로그인",
+        "zh-Hans": "登录 Jonwork",
+    },
 }
+
+
+# Explicit App Store privacy and sharing-permission translations.
+NEW_STRINGS.update({'Share Conversation Data?': {'en': 'Share Conversation Data?',
+                              'de': 'Unterhaltungsdaten teilen?',
+                              'es': '¿Compartir datos de la conversación?',
+                              'fr': 'Partager les données de conversation ?',
+                              'ja': '会話データを共有しますか？',
+                              'ko': '대화 데이터를 공유할까요?',
+                              'zh-Hans': '共享对话数据？'},
+ 'Allow Sharing': {'en': 'Allow Sharing',
+                   'de': 'Teilen erlauben',
+                   'es': 'Permitir compartir',
+                   'fr': 'Autoriser le partage',
+                   'ja': '共有を許可',
+                   'ko': '공유 허용',
+                   'zh-Hans': '允许共享'},
+ 'Your messages, conversation history, attachments, and tool results are sent to this workspace and its AI provider. These services may retain the data under their own policies. You can revoke permission in Settings. Cancel keeps your draft and sends nothing.': {'en': 'Your '
+                                                                                                                                                                                                                                                                             'messages, '
+                                                                                                                                                                                                                                                                             'conversation '
+                                                                                                                                                                                                                                                                             'history, '
+                                                                                                                                                                                                                                                                             'attachments, '
+                                                                                                                                                                                                                                                                             'and '
+                                                                                                                                                                                                                                                                             'tool '
+                                                                                                                                                                                                                                                                             'results '
+                                                                                                                                                                                                                                                                             'are '
+                                                                                                                                                                                                                                                                             'sent '
+                                                                                                                                                                                                                                                                             'to '
+                                                                                                                                                                                                                                                                             'this '
+                                                                                                                                                                                                                                                                             'workspace '
+                                                                                                                                                                                                                                                                             'and '
+                                                                                                                                                                                                                                                                             'its '
+                                                                                                                                                                                                                                                                             'AI '
+                                                                                                                                                                                                                                                                             'provider. '
+                                                                                                                                                                                                                                                                             'These '
+                                                                                                                                                                                                                                                                             'services '
+                                                                                                                                                                                                                                                                             'may '
+                                                                                                                                                                                                                                                                             'retain '
+                                                                                                                                                                                                                                                                             'the '
+                                                                                                                                                                                                                                                                             'data '
+                                                                                                                                                                                                                                                                             'under '
+                                                                                                                                                                                                                                                                             'their '
+                                                                                                                                                                                                                                                                             'own '
+                                                                                                                                                                                                                                                                             'policies. '
+                                                                                                                                                                                                                                                                             'You '
+                                                                                                                                                                                                                                                                             'can '
+                                                                                                                                                                                                                                                                             'revoke '
+                                                                                                                                                                                                                                                                             'permission '
+                                                                                                                                                                                                                                                                             'in '
+                                                                                                                                                                                                                                                                             'Settings. '
+                                                                                                                                                                                                                                                                             'Cancel '
+                                                                                                                                                                                                                                                                             'keeps '
+                                                                                                                                                                                                                                                                             'your '
+                                                                                                                                                                                                                                                                             'draft '
+                                                                                                                                                                                                                                                                             'and '
+                                                                                                                                                                                                                                                                             'sends '
+                                                                                                                                                                                                                                                                             'nothing.',
+                                                                                                                                                                                                                                                                       'de': 'Ihre '
+                                                                                                                                                                                                                                                                             'Nachrichten, '
+                                                                                                                                                                                                                                                                             'der '
+                                                                                                                                                                                                                                                                             'Unterhaltungsverlauf, '
+                                                                                                                                                                                                                                                                             'Anhänge '
+                                                                                                                                                                                                                                                                             'und '
+                                                                                                                                                                                                                                                                             'Werkzeugergebnisse '
+                                                                                                                                                                                                                                                                             'werden '
+                                                                                                                                                                                                                                                                             'an '
+                                                                                                                                                                                                                                                                             'diesen '
+                                                                                                                                                                                                                                                                             'Arbeitsbereich '
+                                                                                                                                                                                                                                                                             'und '
+                                                                                                                                                                                                                                                                             'seinen '
+                                                                                                                                                                                                                                                                             'KI-Anbieter '
+                                                                                                                                                                                                                                                                             'gesendet. '
+                                                                                                                                                                                                                                                                             'Diese '
+                                                                                                                                                                                                                                                                             'Dienste '
+                                                                                                                                                                                                                                                                             'können '
+                                                                                                                                                                                                                                                                             'Daten '
+                                                                                                                                                                                                                                                                             'gemäß '
+                                                                                                                                                                                                                                                                             'ihren '
+                                                                                                                                                                                                                                                                             'eigenen '
+                                                                                                                                                                                                                                                                             'Richtlinien '
+                                                                                                                                                                                                                                                                             'speichern. '
+                                                                                                                                                                                                                                                                             'Sie '
+                                                                                                                                                                                                                                                                             'können '
+                                                                                                                                                                                                                                                                             'die '
+                                                                                                                                                                                                                                                                             'Erlaubnis '
+                                                                                                                                                                                                                                                                             'in '
+                                                                                                                                                                                                                                                                             'den '
+                                                                                                                                                                                                                                                                             'Einstellungen '
+                                                                                                                                                                                                                                                                             'widerrufen. '
+                                                                                                                                                                                                                                                                             'Abbrechen '
+                                                                                                                                                                                                                                                                             'behält '
+                                                                                                                                                                                                                                                                             'Ihren '
+                                                                                                                                                                                                                                                                             'Entwurf '
+                                                                                                                                                                                                                                                                             'und '
+                                                                                                                                                                                                                                                                             'sendet '
+                                                                                                                                                                                                                                                                             'nichts.',
+                                                                                                                                                                                                                                                                       'es': 'Tus '
+                                                                                                                                                                                                                                                                             'mensajes, '
+                                                                                                                                                                                                                                                                             'historial, '
+                                                                                                                                                                                                                                                                             'archivos '
+                                                                                                                                                                                                                                                                             'adjuntos '
+                                                                                                                                                                                                                                                                             'y '
+                                                                                                                                                                                                                                                                             'resultados '
+                                                                                                                                                                                                                                                                             'de '
+                                                                                                                                                                                                                                                                             'herramientas '
+                                                                                                                                                                                                                                                                             'se '
+                                                                                                                                                                                                                                                                             'envían '
+                                                                                                                                                                                                                                                                             'a '
+                                                                                                                                                                                                                                                                             'este '
+                                                                                                                                                                                                                                                                             'espacio '
+                                                                                                                                                                                                                                                                             'de '
+                                                                                                                                                                                                                                                                             'trabajo '
+                                                                                                                                                                                                                                                                             'y '
+                                                                                                                                                                                                                                                                             'a '
+                                                                                                                                                                                                                                                                             'su '
+                                                                                                                                                                                                                                                                             'proveedor '
+                                                                                                                                                                                                                                                                             'de '
+                                                                                                                                                                                                                                                                             'IA. '
+                                                                                                                                                                                                                                                                             'Estos '
+                                                                                                                                                                                                                                                                             'servicios '
+                                                                                                                                                                                                                                                                             'pueden '
+                                                                                                                                                                                                                                                                             'conservar '
+                                                                                                                                                                                                                                                                             'los '
+                                                                                                                                                                                                                                                                             'datos '
+                                                                                                                                                                                                                                                                             'según '
+                                                                                                                                                                                                                                                                             'sus '
+                                                                                                                                                                                                                                                                             'propias '
+                                                                                                                                                                                                                                                                             'políticas. '
+                                                                                                                                                                                                                                                                             'Puedes '
+                                                                                                                                                                                                                                                                             'revocar '
+                                                                                                                                                                                                                                                                             'el '
+                                                                                                                                                                                                                                                                             'permiso '
+                                                                                                                                                                                                                                                                             'en '
+                                                                                                                                                                                                                                                                             'Ajustes. '
+                                                                                                                                                                                                                                                                             'Cancelar '
+                                                                                                                                                                                                                                                                             'conserva '
+                                                                                                                                                                                                                                                                             'el '
+                                                                                                                                                                                                                                                                             'borrador '
+                                                                                                                                                                                                                                                                             'y '
+                                                                                                                                                                                                                                                                             'no '
+                                                                                                                                                                                                                                                                             'envía '
+                                                                                                                                                                                                                                                                             'nada.',
+                                                                                                                                                                                                                                                                       'fr': 'Vos '
+                                                                                                                                                                                                                                                                             'messages, '
+                                                                                                                                                                                                                                                                             'l’historique, '
+                                                                                                                                                                                                                                                                             'les '
+                                                                                                                                                                                                                                                                             'pièces '
+                                                                                                                                                                                                                                                                             'jointes '
+                                                                                                                                                                                                                                                                             'et '
+                                                                                                                                                                                                                                                                             'les '
+                                                                                                                                                                                                                                                                             'résultats '
+                                                                                                                                                                                                                                                                             'des '
+                                                                                                                                                                                                                                                                             'outils '
+                                                                                                                                                                                                                                                                             'sont '
+                                                                                                                                                                                                                                                                             'envoyés '
+                                                                                                                                                                                                                                                                             'à '
+                                                                                                                                                                                                                                                                             'cet '
+                                                                                                                                                                                                                                                                             'espace '
+                                                                                                                                                                                                                                                                             'de '
+                                                                                                                                                                                                                                                                             'travail '
+                                                                                                                                                                                                                                                                             'et '
+                                                                                                                                                                                                                                                                             'à '
+                                                                                                                                                                                                                                                                             'son '
+                                                                                                                                                                                                                                                                             'fournisseur '
+                                                                                                                                                                                                                                                                             'd’IA. '
+                                                                                                                                                                                                                                                                             'Ces '
+                                                                                                                                                                                                                                                                             'services '
+                                                                                                                                                                                                                                                                             'peuvent '
+                                                                                                                                                                                                                                                                             'conserver '
+                                                                                                                                                                                                                                                                             'les '
+                                                                                                                                                                                                                                                                             'données '
+                                                                                                                                                                                                                                                                             'selon '
+                                                                                                                                                                                                                                                                             'leurs '
+                                                                                                                                                                                                                                                                             'propres '
+                                                                                                                                                                                                                                                                             'politiques. '
+                                                                                                                                                                                                                                                                             'Vous '
+                                                                                                                                                                                                                                                                             'pouvez '
+                                                                                                                                                                                                                                                                             'retirer '
+                                                                                                                                                                                                                                                                             'votre '
+                                                                                                                                                                                                                                                                             'autorisation '
+                                                                                                                                                                                                                                                                             'dans '
+                                                                                                                                                                                                                                                                             'les '
+                                                                                                                                                                                                                                                                             'réglages. '
+                                                                                                                                                                                                                                                                             'Annuler '
+                                                                                                                                                                                                                                                                             'conserve '
+                                                                                                                                                                                                                                                                             'le '
+                                                                                                                                                                                                                                                                             'brouillon '
+                                                                                                                                                                                                                                                                             'sans '
+                                                                                                                                                                                                                                                                             'rien '
+                                                                                                                                                                                                                                                                             'envoyer.',
+                                                                                                                                                                                                                                                                       'ja': 'メッセージ、会話履歴、添付ファイル、ツールの結果は、このワークスペースとAI提供者に送信されます。各サービスは独自のポリシーに従ってデータを保持する場合があります。設定で許可を取り消せます。キャンセルすると下書きは保持され、何も送信されません。',
+                                                                                                                                                                                                                                                                       'ko': '메시지, '
+                                                                                                                                                                                                                                                                             '대화 '
+                                                                                                                                                                                                                                                                             '기록, '
+                                                                                                                                                                                                                                                                             '첨부 '
+                                                                                                                                                                                                                                                                             '파일 '
+                                                                                                                                                                                                                                                                             '및 '
+                                                                                                                                                                                                                                                                             '도구 '
+                                                                                                                                                                                                                                                                             '결과가 '
+                                                                                                                                                                                                                                                                             '이 '
+                                                                                                                                                                                                                                                                             '작업 '
+                                                                                                                                                                                                                                                                             '공간과 '
+                                                                                                                                                                                                                                                                             'AI '
+                                                                                                                                                                                                                                                                             '제공자에게 '
+                                                                                                                                                                                                                                                                             '전송됩니다. '
+                                                                                                                                                                                                                                                                             '각 '
+                                                                                                                                                                                                                                                                             '서비스는 '
+                                                                                                                                                                                                                                                                             '자체 '
+                                                                                                                                                                                                                                                                             '정책에 '
+                                                                                                                                                                                                                                                                             '따라 '
+                                                                                                                                                                                                                                                                             '데이터를 '
+                                                                                                                                                                                                                                                                             '보관할 '
+                                                                                                                                                                                                                                                                             '수 '
+                                                                                                                                                                                                                                                                             '있습니다. '
+                                                                                                                                                                                                                                                                             '설정에서 '
+                                                                                                                                                                                                                                                                             '허용을 '
+                                                                                                                                                                                                                                                                             '취소할 '
+                                                                                                                                                                                                                                                                             '수 '
+                                                                                                                                                                                                                                                                             '있습니다. '
+                                                                                                                                                                                                                                                                             '취소하면 '
+                                                                                                                                                                                                                                                                             '초안이 '
+                                                                                                                                                                                                                                                                             '유지되고 '
+                                                                                                                                                                                                                                                                             '아무것도 '
+                                                                                                                                                                                                                                                                             '전송되지 '
+                                                                                                                                                                                                                                                                             '않습니다.',
+                                                                                                                                                                                                                                                                       'zh-Hans': '您的消息、对话历史、附件和工具结果将发送给此工作区及其 '
+                                                                                                                                                                                                                                                                                  'AI '
+                                                                                                                                                                                                                                                                                  '提供商。这些服务可能按照各自的政策保留数据。您可在设置中撤销授权。取消将保留草稿，且不会发送任何内容。'},
+ 'Revoke AI Sharing Permission': {'en': 'Revoke AI Sharing Permission',
+                                  'de': 'KI-Freigabe widerrufen',
+                                  'es': 'Revocar permiso de compartir con IA',
+                                  'fr': 'Retirer l’autorisation de partage avec l’IA',
+                                  'ja': 'AI共有の許可を取り消す',
+                                  'ko': 'AI 공유 허용 취소',
+                                  'zh-Hans': '撤销 AI 共享授权'},
+ 'Future messages and retries will ask permission again. This does not delete data already held by the workspace or AI provider.': {'en': 'Future '
+                                                                                                                                          'messages '
+                                                                                                                                          'and '
+                                                                                                                                          'retries '
+                                                                                                                                          'will '
+                                                                                                                                          'ask '
+                                                                                                                                          'permission '
+                                                                                                                                          'again. '
+                                                                                                                                          'This '
+                                                                                                                                          'does '
+                                                                                                                                          'not '
+                                                                                                                                          'delete '
+                                                                                                                                          'data '
+                                                                                                                                          'already '
+                                                                                                                                          'held '
+                                                                                                                                          'by '
+                                                                                                                                          'the '
+                                                                                                                                          'workspace '
+                                                                                                                                          'or '
+                                                                                                                                          'AI '
+                                                                                                                                          'provider.',
+                                                                                                                                    'de': 'Bei '
+                                                                                                                                          'künftigen '
+                                                                                                                                          'Nachrichten '
+                                                                                                                                          'und '
+                                                                                                                                          'Wiederholungen '
+                                                                                                                                          'wird '
+                                                                                                                                          'erneut '
+                                                                                                                                          'um '
+                                                                                                                                          'Erlaubnis '
+                                                                                                                                          'gebeten. '
+                                                                                                                                          'Bereits '
+                                                                                                                                          'beim '
+                                                                                                                                          'Arbeitsbereich '
+                                                                                                                                          'oder '
+                                                                                                                                          'KI-Anbieter '
+                                                                                                                                          'gespeicherte '
+                                                                                                                                          'Daten '
+                                                                                                                                          'werden '
+                                                                                                                                          'dadurch '
+                                                                                                                                          'nicht '
+                                                                                                                                          'gelöscht.',
+                                                                                                                                    'es': 'Los '
+                                                                                                                                          'próximos '
+                                                                                                                                          'mensajes '
+                                                                                                                                          'y '
+                                                                                                                                          'reintentos '
+                                                                                                                                          'pedirán '
+                                                                                                                                          'permiso '
+                                                                                                                                          'de '
+                                                                                                                                          'nuevo. '
+                                                                                                                                          'Esto '
+                                                                                                                                          'no '
+                                                                                                                                          'elimina '
+                                                                                                                                          'los '
+                                                                                                                                          'datos '
+                                                                                                                                          'que '
+                                                                                                                                          'ya '
+                                                                                                                                          'conserva '
+                                                                                                                                          'el '
+                                                                                                                                          'espacio '
+                                                                                                                                          'de '
+                                                                                                                                          'trabajo '
+                                                                                                                                          'o '
+                                                                                                                                          'el '
+                                                                                                                                          'proveedor '
+                                                                                                                                          'de '
+                                                                                                                                          'IA.',
+                                                                                                                                    'fr': 'Les '
+                                                                                                                                          'prochains '
+                                                                                                                                          'messages '
+                                                                                                                                          'et '
+                                                                                                                                          'nouvelles '
+                                                                                                                                          'tentatives '
+                                                                                                                                          'demanderont '
+                                                                                                                                          'à '
+                                                                                                                                          'nouveau '
+                                                                                                                                          'votre '
+                                                                                                                                          'autorisation. '
+                                                                                                                                          'Cela '
+                                                                                                                                          'ne '
+                                                                                                                                          'supprime '
+                                                                                                                                          'pas '
+                                                                                                                                          'les '
+                                                                                                                                          'données '
+                                                                                                                                          'déjà '
+                                                                                                                                          'conservées '
+                                                                                                                                          'par '
+                                                                                                                                          'l’espace '
+                                                                                                                                          'de '
+                                                                                                                                          'travail '
+                                                                                                                                          'ou '
+                                                                                                                                          'le '
+                                                                                                                                          'fournisseur '
+                                                                                                                                          'd’IA.',
+                                                                                                                                    'ja': '今後のメッセージ送信や再試行時に、再び許可を求めます。ワークスペースやAI提供者がすでに保持するデータは削除されません。',
+                                                                                                                                    'ko': '이후 '
+                                                                                                                                          '메시지와 '
+                                                                                                                                          '재시도 '
+                                                                                                                                          '시 '
+                                                                                                                                          '다시 '
+                                                                                                                                          '허용을 '
+                                                                                                                                          '요청합니다. '
+                                                                                                                                          '작업 '
+                                                                                                                                          '공간이나 '
+                                                                                                                                          'AI '
+                                                                                                                                          '제공자가 '
+                                                                                                                                          '이미 '
+                                                                                                                                          '보관 '
+                                                                                                                                          '중인 '
+                                                                                                                                          '데이터는 '
+                                                                                                                                          '삭제되지 '
+                                                                                                                                          '않습니다.',
+                                                                                                                                    'zh-Hans': '以后的消息和重试将重新请求授权。这不会删除工作区或 '
+                                                                                                                                               'AI '
+                                                                                                                                               '提供商已保留的数据。'},
+ 'Jonwork Support': {'en': 'Jonwork Support',
+                     'de': 'Jonwork-Support',
+                     'es': 'Soporte de Jonwork',
+                     'fr': 'Assistance Jonwork',
+                     'ja': 'Jonworkサポート',
+                     'ko': 'Jonwork 지원',
+                     'zh-Hans': 'Jonwork 支持'},
+ 'Open public GitHub issues. Never post passwords, tokens, private conversations, or attachments.': {'en': 'Open '
+                                                                                                           'public '
+                                                                                                           'GitHub '
+                                                                                                           'issues. '
+                                                                                                           'Never '
+                                                                                                           'post '
+                                                                                                           'passwords, '
+                                                                                                           'tokens, '
+                                                                                                           'private '
+                                                                                                           'conversations, '
+                                                                                                           'or '
+                                                                                                           'attachments.',
+                                                                                                     'de': 'Öffnet '
+                                                                                                           'öffentliche '
+                                                                                                           'GitHub-Issues. '
+                                                                                                           'Veröffentlichen '
+                                                                                                           'Sie '
+                                                                                                           'niemals '
+                                                                                                           'Passwörter, '
+                                                                                                           'Tokens, '
+                                                                                                           'private '
+                                                                                                           'Unterhaltungen '
+                                                                                                           'oder '
+                                                                                                           'Anhänge.',
+                                                                                                     'es': 'Abre '
+                                                                                                           'las '
+                                                                                                           'incidencias '
+                                                                                                           'públicas '
+                                                                                                           'de '
+                                                                                                           'GitHub. '
+                                                                                                           'Nunca '
+                                                                                                           'publiques '
+                                                                                                           'contraseñas, '
+                                                                                                           'tokens, '
+                                                                                                           'conversaciones '
+                                                                                                           'privadas '
+                                                                                                           'ni '
+                                                                                                           'archivos '
+                                                                                                           'adjuntos.',
+                                                                                                     'fr': 'Ouvre '
+                                                                                                           'les '
+                                                                                                           'tickets '
+                                                                                                           'publics '
+                                                                                                           'GitHub. '
+                                                                                                           'Ne '
+                                                                                                           'publiez '
+                                                                                                           'jamais '
+                                                                                                           'de '
+                                                                                                           'mots '
+                                                                                                           'de '
+                                                                                                           'passe, '
+                                                                                                           'jetons, '
+                                                                                                           'conversations '
+                                                                                                           'privées '
+                                                                                                           'ou '
+                                                                                                           'pièces '
+                                                                                                           'jointes.',
+                                                                                                     'ja': '公開GitHub '
+                                                                                                           'Issuesを開きます。パスワード、トークン、非公開の会話や添付ファイルは投稿しないでください。',
+                                                                                                     'ko': '공개 '
+                                                                                                           'GitHub '
+                                                                                                           '이슈를 '
+                                                                                                           '엽니다. '
+                                                                                                           '비밀번호, '
+                                                                                                           '토큰, '
+                                                                                                           '비공개 '
+                                                                                                           '대화 '
+                                                                                                           '또는 '
+                                                                                                           '첨부 '
+                                                                                                           '파일을 '
+                                                                                                           '게시하지 '
+                                                                                                           '마세요.',
+                                                                                                     'zh-Hans': '打开公开 '
+                                                                                                                'GitHub '
+                                                                                                                '问题页面。请勿发布密码、令牌、私人对话或附件。'}})
+
+NEW_STRINGS.update({'Add & Reference': {'de': 'Hinzufügen und Referenzieren',
+                     'es': 'Añadir y referenciar',
+                     'fr': 'Ajouter et référencer',
+                     'ja': '追加と参照',
+                     'ko': '추가 및 참조',
+                     'zh-Hans': '添加与引用'},
+ 'Attachments': {'de': 'Anhänge',
+                 'es': 'Archivos adjuntos',
+                 'fr': 'Pièces jointes',
+                 'ja': '添付ファイル',
+                 'ko': '첨부 파일',
+                 'zh-Hans': '附件'},
+ "Available sources follow this workspace and model's attachment permissions.": {'de': 'Verfügbare '
+                                                                                       'Quellen '
+                                                                                       'richten '
+                                                                                       'sich nach '
+                                                                                       'den '
+                                                                                       'Anhangberechtigungen '
+                                                                                       'des '
+                                                                                       'Arbeitsbereichs '
+                                                                                       'und '
+                                                                                       'Modells.',
+                                                                                 'es': 'Las '
+                                                                                       'fuentes '
+                                                                                       'disponibles '
+                                                                                       'dependen '
+                                                                                       'de los '
+                                                                                       'permisos '
+                                                                                       'de '
+                                                                                       'adjuntos '
+                                                                                       'del '
+                                                                                       'espacio y '
+                                                                                       'del '
+                                                                                       'modelo.',
+                                                                                 'fr': 'Les '
+                                                                                       'sources '
+                                                                                       'disponibles '
+                                                                                       'dépendent '
+                                                                                       'des '
+                                                                                       'autorisations '
+                                                                                       'de pièces '
+                                                                                       'jointes de '
+                                                                                       'cet espace '
+                                                                                       'et de ce '
+                                                                                       'modèle.',
+                                                                                 'ja': '利用できる項目は、このワークスペースとモデルの添付権限に従います。',
+                                                                                 'ko': '사용 가능한 항목은 '
+                                                                                       '이 작업 공간과 '
+                                                                                       '모델의 첨부 권한에 '
+                                                                                       '따라 달라집니다.',
+                                                                                 'zh-Hans': '可用来源取决于当前工作区与模型的附件权限。'},
+ 'Changes are confirmed by the server before the selection updates.': {'de': 'Die Auswahl wird '
+                                                                             'erst nach '
+                                                                             'Bestätigung durch '
+                                                                             'den Server '
+                                                                             'aktualisiert.',
+                                                                       'es': 'La selección se '
+                                                                             'actualiza cuando el '
+                                                                             'servidor confirma '
+                                                                             'los cambios.',
+                                                                       'fr': 'La sélection est '
+                                                                             'mise à jour après '
+                                                                             'confirmation par le '
+                                                                             'serveur.',
+                                                                       'ja': 'サーバーが変更を確認してから選択が更新されます。',
+                                                                       'ko': '서버에서 변경을 확인한 후 선택이 '
+                                                                             '업데이트됩니다.',
+                                                                       'zh-Hans': '服务器确认更改后，选中项才会更新。'},
+ 'Completed': {'de': 'Abgeschlossen',
+               'es': 'Completado',
+               'fr': 'Terminé',
+               'ja': '完了',
+               'ko': '완료',
+               'zh-Hans': '已完成'},
+ 'Conversation Activity': {'de': 'Unterhaltungsaktivität',
+                           'es': 'Actividad de la conversación',
+                           'fr': 'Activité de la conversation',
+                           'ja': '会話のアクティビティ',
+                           'ko': '대화 활동',
+                           'zh-Hans': '会话活动'},
+ 'Current Conversation': {'de': 'Aktuelle Unterhaltung',
+                          'es': 'Conversación actual',
+                          'fr': 'Conversation actuelle',
+                          'ja': '現在の会話',
+                          'ko': '현재 대화',
+                          'zh-Hans': '当前会话'},
+ 'Default Settings': {'de': 'Standardeinstellungen',
+                      'es': 'Configuración predeterminada',
+                      'fr': 'Réglages par défaut',
+                      'ja': 'デフォルト設定',
+                      'ko': '기본 설정',
+                      'zh-Hans': '默认设置'},
+ 'Default model and thinking depth.': {'de': 'Standardmodell und Denktiefe.',
+                                       'es': 'Modelo y profundidad de razonamiento '
+                                             'predeterminados.',
+                                       'fr': 'Modèle et profondeur de réflexion par défaut.',
+                                       'ja': 'デフォルトのモデルと思考の深さ。',
+                                       'ko': '기본 모델과 사고 깊이입니다.',
+                                       'zh-Hans': '默认模型与思考深度。'},
+ 'Defaults apply to new conversations in this authenticated workspace. Signing out removes them.': {'de': 'Diese '
+                                                                                                          'Vorgaben '
+                                                                                                          'gelten '
+                                                                                                          'für '
+                                                                                                          'neue '
+                                                                                                          'Unterhaltungen '
+                                                                                                          'im '
+                                                                                                          'angemeldeten '
+                                                                                                          'Arbeitsbereich '
+                                                                                                          'und '
+                                                                                                          'werden '
+                                                                                                          'beim '
+                                                                                                          'Abmelden '
+                                                                                                          'entfernt.',
+                                                                                                    'es': 'Los '
+                                                                                                          'valores '
+                                                                                                          'predeterminados '
+                                                                                                          'se '
+                                                                                                          'aplican '
+                                                                                                          'a '
+                                                                                                          'nuevas '
+                                                                                                          'conversaciones '
+                                                                                                          'en '
+                                                                                                          'este '
+                                                                                                          'espacio '
+                                                                                                          'autenticado '
+                                                                                                          'y '
+                                                                                                          'se '
+                                                                                                          'borran '
+                                                                                                          'al '
+                                                                                                          'cerrar '
+                                                                                                          'sesión.',
+                                                                                                    'fr': 'Ces '
+                                                                                                          'réglages '
+                                                                                                          's’appliquent '
+                                                                                                          'aux '
+                                                                                                          'nouvelles '
+                                                                                                          'conversations '
+                                                                                                          'de '
+                                                                                                          'cet '
+                                                                                                          'espace '
+                                                                                                          'connecté '
+                                                                                                          'et '
+                                                                                                          'sont '
+                                                                                                          'supprimés '
+                                                                                                          'à '
+                                                                                                          'la '
+                                                                                                          'déconnexion.',
+                                                                                                    'ja': 'この認証済みワークスペースの新しい会話に適用されます。サインアウトすると削除されます。',
+                                                                                                    'ko': '이 '
+                                                                                                          '로그인된 '
+                                                                                                          '작업 '
+                                                                                                          '공간의 '
+                                                                                                          '새 '
+                                                                                                          '대화에 '
+                                                                                                          '적용됩니다. '
+                                                                                                          '로그아웃하면 '
+                                                                                                          '삭제됩니다.',
+                                                                                                    'zh-Hans': '默认设置用于此已登录工作区的新会话，退出登录后会清除。'},
+ 'Execution': {'de': 'Ausführung',
+               'es': 'Ejecución',
+               'fr': 'Exécution',
+               'ja': '実行状況',
+               'ko': '실행',
+               'zh-Hans': '执行过程'},
+ 'Export': {'de': 'Exportieren',
+            'es': 'Exportar',
+            'fr': 'Exporter',
+            'ja': '書き出し',
+            'ko': '내보내기',
+            'zh-Hans': '导出'},
+ 'Export Conversation': {'de': 'Unterhaltung exportieren',
+                         'es': 'Exportar conversación',
+                         'fr': 'Exporter la conversation',
+                         'ja': '会話を書き出す',
+                         'ko': '대화 내보내기',
+                         'zh-Hans': '导出会话'},
+ 'Failed': {'de': 'Fehlgeschlagen',
+            'es': 'Falló',
+            'fr': 'Échec',
+            'ja': '失敗',
+            'ko': '실패',
+            'zh-Hans': '失败'},
+ 'Files': {'de': 'Dateien',
+           'es': 'Archivos',
+           'fr': 'Fichiers',
+           'ja': 'ファイル',
+           'ko': '파일',
+           'zh-Hans': '文件'},
+ 'Home history is available. Sending and editing require the next server capability update.': {'de': 'Hier '
+                                                                                                     'können '
+                                                                                                     'Sie '
+                                                                                                     'den '
+                                                                                                     'Home-Verlauf '
+                                                                                                     'ansehen. '
+                                                                                                     'Senden '
+                                                                                                     'und '
+                                                                                                     'Bearbeiten '
+                                                                                                     'sind '
+                                                                                                     'noch '
+                                                                                                     'nicht '
+                                                                                                     'verfügbar.',
+                                                                                               'es': 'Puedes '
+                                                                                                     'ver '
+                                                                                                     'el '
+                                                                                                     'historial '
+                                                                                                     'de '
+                                                                                                     'Home '
+                                                                                                     'aquí. '
+                                                                                                     'Enviar '
+                                                                                                     'y '
+                                                                                                     'editar '
+                                                                                                     'aún '
+                                                                                                     'no '
+                                                                                                     'están '
+                                                                                                     'disponibles.',
+                                                                                               'fr': 'Vous '
+                                                                                                     'pouvez '
+                                                                                                     'consulter '
+                                                                                                     'l’historique '
+                                                                                                     'Home '
+                                                                                                     'ici. '
+                                                                                                     'L’envoi '
+                                                                                                     'et '
+                                                                                                     'la '
+                                                                                                     'modification '
+                                                                                                     'ne '
+                                                                                                     'sont '
+                                                                                                     'pas '
+                                                                                                     'encore '
+                                                                                                     'disponibles.',
+                                                                                               'ja': 'ここではHomeの履歴を確認できます。送信と編集はまだ利用できません。',
+                                                                                               'ko': '여기에서 '
+                                                                                                     'Home '
+                                                                                                     '기록을 '
+                                                                                                     '볼 '
+                                                                                                     '수 '
+                                                                                                     '있습니다. '
+                                                                                                     '보내기와 '
+                                                                                                     '편집은 '
+                                                                                                     '아직 '
+                                                                                                     '사용할 '
+                                                                                                     '수 '
+                                                                                                     '없습니다.',
+                                                                                               'zh-Hans': '可在此查看 '
+                                                                                                          'Home '
+                                                                                                          '历史。发送与编辑暂不可用。'},
+ 'Markdown': {'de': 'Markdown',
+              'es': 'Markdown',
+              'fr': 'Markdown',
+              'ja': 'Markdown',
+              'ko': 'Markdown',
+              'zh-Hans': 'Markdown'},
+ 'Maximum': {'de': 'Maximum',
+             'es': 'Máximo',
+             'fr': 'Maximum',
+             'ja': '最大',
+             'ko': '최대',
+             'zh-Hans': '最高'},
+ 'Minimal': {'de': 'Minimal',
+             'es': 'Mínimo',
+             'fr': 'Minimal',
+             'ja': '最小',
+             'ko': '최소',
+             'zh-Hans': '极少'},
+ 'Model & AI': {'de': 'Modell und KI',
+                'es': 'Modelo e IA',
+                'fr': 'Modèle et IA',
+                'ja': 'モデルとAI',
+                'ko': '모델 및 AI',
+                'zh-Hans': '模型与 AI'},
+ 'Open an authenticated conversation to configure Model & AI.': {'de': 'Öffnen Sie eine '
+                                                                       'angemeldete Unterhaltung, '
+                                                                       'um Modell und KI '
+                                                                       'einzustellen.',
+                                                                 'es': 'Abre una conversación '
+                                                                       'autenticada para '
+                                                                       'configurar el modelo y la '
+                                                                       'IA.',
+                                                                 'fr': 'Ouvrez une conversation '
+                                                                       'connectée pour configurer '
+                                                                       'le modèle et l’IA.',
+                                                                 'ja': '認証済みの会話を開いてモデルとAIを設定してください。',
+                                                                 'ko': '로그인된 대화를 열어 모델 및 AI를 '
+                                                                       '설정하세요.',
+                                                                 'zh-Hans': '打开已登录的会话后，可配置模型与 AI。'},
+ 'Pin': {'de': 'Anheften',
+         'es': 'Fijar',
+         'fr': 'Épingler',
+         'ja': '固定',
+         'ko': '고정',
+         'zh-Hans': '置顶'},
+ 'Read Aloud': {'de': 'Vorlesen',
+                'es': 'Leer en voz alta',
+                'fr': 'Lire à voix haute',
+                'ja': '読み上げ',
+                'ko': '소리 내어 읽기',
+                'zh-Hans': '朗读'},
+ 'Remove': {'de': 'Entfernen',
+            'es': 'Quitar',
+            'fr': 'Retirer',
+            'ja': '削除',
+            'ko': '제거',
+            'zh-Hans': '移除'},
+ 'Remove Favorite': {'de': 'Favorit entfernen',
+                     'es': 'Quitar de favoritos',
+                     'fr': 'Retirer des favoris',
+                     'ja': 'お気に入りから削除',
+                     'ko': '즐겨찾기 해제',
+                     'zh-Hans': '取消收藏'},
+ 'Results': {'de': 'Ergebnisse',
+             'es': 'Resultados',
+             'fr': 'Résultats',
+             'ja': '結果',
+             'ko': '결과',
+             'zh-Hans': '结果'},
+ 'Select messages, or export the whole conversation.': {'de': 'Wählen Sie Nachrichten aus oder '
+                                                              'exportieren Sie die gesamte '
+                                                              'Unterhaltung.',
+                                                        'es': 'Selecciona mensajes o exporta la '
+                                                              'conversación completa.',
+                                                        'fr': 'Sélectionnez des messages ou '
+                                                              'exportez toute la conversation.',
+                                                        'ja': 'メッセージを選択するか、会話全体を書き出してください。',
+                                                        'ko': '메시지를 선택하거나 전체 대화를 내보내세요.',
+                                                        'zh-Hans': '选择消息，或导出整段会话。'},
+ 'Selected Attachments': {'de': 'Ausgewählte Anhänge',
+                          'es': 'Adjuntos seleccionados',
+                          'fr': 'Pièces jointes sélectionnées',
+                          'ja': '選択した添付ファイル',
+                          'ko': '선택한 첨부 파일',
+                          'zh-Hans': '已选附件'},
+ 'Send': {'de': 'Senden',
+          'es': 'Enviar',
+          'fr': 'Envoyer',
+          'ja': '送信',
+          'ko': '보내기',
+          'zh-Hans': '发送'},
+ 'Thinking': {'de': 'Denken',
+              'es': 'Razonamiento',
+              'fr': 'Réflexion',
+              'ja': '思考',
+              'ko': '사고',
+              'zh-Hans': '思考'},
+ 'Unable to Complete Action': {'de': 'Aktion konnte nicht abgeschlossen werden',
+                               'es': 'No se pudo completar la acción',
+                               'fr': 'Impossible de terminer l’action',
+                               'ja': '操作を完了できません',
+                               'ko': '작업을 완료할 수 없습니다',
+                               'zh-Hans': '无法完成操作'},
+ 'Unpin': {'de': 'Lösen',
+           'es': 'Desfijar',
+           'fr': 'Désépingler',
+           'ja': '固定を解除',
+           'ko': '고정 해제',
+           'zh-Hans': '取消置顶'},
+ 'Very High': {'de': 'Sehr hoch',
+               'es': 'Muy alto',
+               'fr': 'Très élevé',
+               'ja': '非常に高い',
+               'ko': '매우 높음',
+               'zh-Hans': '很高'},
+ 'Working…': {'de': 'Wird bearbeitet…',
+              'es': 'Trabajando…',
+              'fr': 'En cours…',
+              'ja': '処理中…',
+              'ko': '작업 중…',
+              'zh-Hans': '处理中…'}})
+
+NEW_STRINGS.update({'Another conversation change is still being sent. Try again in a moment.': {'de': 'Eine andere Änderung '
+                                                                                   'wird noch gesendet. '
+                                                                                   'Versuchen Sie es gleich '
+                                                                                   'erneut.',
+                                                                             'es': 'Aún se está enviando '
+                                                                                   'otro cambio. Inténtalo '
+                                                                                   'de nuevo en un momento.',
+                                                                             'fr': 'Une autre modification '
+                                                                                   'est encore en cours '
+                                                                                   'd’envoi. Réessayez dans '
+                                                                                   'un instant.',
+                                                                             'ja': '別の変更を送信中です。しばらくしてから再試行してください。',
+                                                                             'ko': '다른 변경 사항을 보내는 중입니다. 잠시 후 '
+                                                                                   '다시 시도하세요.',
+                                                                             'zh-Hans': '其他会话更改仍在发送，请稍后重试。'},
+ 'Conversation history must be restored from the server.': {'de': 'Der Verlauf muss vom Server '
+                                                                  'wiederhergestellt werden.',
+                                                            'es': 'El historial debe restaurarse desde el '
+                                                                  'servidor.',
+                                                            'fr': 'L’historique doit être restauré depuis le '
+                                                                  'serveur.',
+                                                            'ja': 'サーバーから会話履歴を復元する必要があります。',
+                                                            'ko': '서버에서 대화 기록을 복원해야 합니다.',
+                                                            'zh-Hans': '需要从服务器恢复会话历史。'},
+ 'Jonwork could not complete the request.': {'de': 'Jonwork konnte die Anfrage nicht abschließen.',
+                                             'es': 'Jonwork no pudo completar la solicitud.',
+                                             'fr': 'Jonwork n’a pas pu terminer la demande.',
+                                             'ja': 'Jonworkはリクエストを完了できませんでした。',
+                                             'ko': 'Jonwork가 요청을 완료하지 못했습니다.',
+                                             'zh-Hans': 'Jonwork 无法完成请求。'},
+ 'Retry Failed Response': {'de': 'Fehlgeschlagene Antwort erneut versuchen',
+                           'es': 'Reintentar respuesta fallida',
+                           'fr': 'Réessayer la réponse échouée',
+                           'ja': '失敗した応答を再試行',
+                           'ko': '실패한 응답 재시도',
+                           'zh-Hans': '重试失败的回复'},
+ 'The conversation changed on another device. Restoring the latest version…': {'de': 'Die Unterhaltung wurde '
+                                                                                     'auf einem anderen '
+                                                                                     'Gerät geändert. Die '
+                                                                                     'aktuelle Version wird '
+                                                                                     'wiederhergestellt…',
+                                                                               'es': 'La conversación cambió '
+                                                                                     'en otro dispositivo. '
+                                                                                     'Restaurando la última '
+                                                                                     'versión…',
+                                                                               'fr': 'La conversation a '
+                                                                                     'changé sur un autre '
+                                                                                     'appareil. Restauration '
+                                                                                     'de la dernière '
+                                                                                     'version…',
+                                                                               'ja': '別のデバイスで会話が変更されました。最新の状態を復元中…',
+                                                                               'ko': '다른 기기에서 대화가 변경되었습니다. '
+                                                                                     '최신 버전을 복원 중…',
+                                                                               'zh-Hans': '会话已在其他设备上更改，正在恢复最新版本…'},
+ 'The selected attachments exceed the server limit.': {'de': 'Die ausgewählten Anhänge überschreiten das '
+                                                             'Serverlimit.',
+                                                       'es': 'Los adjuntos seleccionados superan el límite '
+                                                             'del servidor.',
+                                                       'fr': 'Les pièces jointes sélectionnées dépassent la '
+                                                             'limite du serveur.',
+                                                       'ja': '選択した添付ファイルがサーバーの上限を超えています。',
+                                                       'ko': '선택한 첨부 파일이 서버 제한을 초과합니다.',
+                                                       'zh-Hans': '所选附件超出服务器限制。'},
+ 'This conversation is no longer available.': {'de': 'Diese Unterhaltung ist nicht mehr verfügbar.',
+                                               'es': 'Esta conversación ya no está disponible.',
+                                               'fr': 'Cette conversation n’est plus disponible.',
+                                               'ja': 'この会話はもう利用できません。',
+                                               'ko': '이 대화는 더 이상 사용할 수 없습니다.',
+                                               'zh-Hans': '此会话已不可用。'},
+ 'This server does not support secure native sign-in.': {'de': 'Dieser Server unterstützt keine sichere '
+                                                               'native Anmeldung.',
+                                                         'es': 'Este servidor no admite inicio de sesión '
+                                                               'nativo seguro.',
+                                                         'fr': 'Ce serveur ne prend pas en charge la '
+                                                               'connexion native sécurisée.',
+                                                         'ja': 'このサーバーは安全なネイティブサインインに対応していません。',
+                                                         'ko': '이 서버는 안전한 기본 앱 로그인을 지원하지 않습니다.',
+                                                         'zh-Hans': '此服务器不支持安全的原生登录。'},
+ 'This server or model does not support the requested attachment.': {'de': 'Dieser Server oder dieses Modell '
+                                                                           'unterstützt den angeforderten '
+                                                                           'Anhang nicht.',
+                                                                     'es': 'Este servidor o modelo no admite '
+                                                                           'el adjunto solicitado.',
+                                                                     'fr': 'Ce serveur ou ce modèle ne prend '
+                                                                           'pas en charge la pièce jointe '
+                                                                           'demandée.',
+                                                                     'ja': 'このサーバーまたはモデルは、指定の添付ファイルに対応していません。',
+                                                                     'ko': '이 서버 또는 모델은 요청한 첨부 파일을 지원하지 '
+                                                                           '않습니다.',
+                                                                     'zh-Hans': '此服务器或模型不支持所请求的附件。'}})
+
+NEW_STRINGS.update({'Awaiting Clarification': {'de': 'Klärung ausstehend',
+                            'es': 'Esperando aclaración',
+                            'fr': 'En attente de précisions',
+                            'ja': '回答待ち',
+                            'ko': '추가 답변 대기 중',
+                            'zh-Hans': '等待补充说明'},
+ 'Awaiting Confirmation': {'de': 'Bestätigung ausstehend',
+                           'es': 'Esperando confirmación',
+                           'fr': 'En attente de confirmation',
+                           'ja': '確認待ち',
+                           'ko': '확인 대기 중',
+                           'zh-Hans': '等待确认'},
+ 'Research Outline': {'de': 'Recherchegliederung',
+                      'es': 'Esquema de investigación',
+                      'fr': 'Plan de recherche',
+                      'ja': '調査の概要',
+                      'ko': '연구 개요',
+                      'zh-Hans': '研究提纲'},
+ 'Stopped': {'de': 'Angehalten',
+             'es': 'Detenido',
+             'fr': 'Arrêté',
+             'ja': '停止',
+             'ko': '중지됨',
+             'zh-Hans': '已停止'},
+ 'Usage': {'de': 'Nutzung',
+           'es': 'Uso',
+           'fr': 'Utilisation',
+           'ja': '使用量',
+           'ko': '사용량',
+           'zh-Hans': '用量'}})
+
+NEW_STRINGS.update({'Choose an available conversation from your workspace.': {'de': 'Wählen Sie eine verfügbare '
+                                                                 'Unterhaltung aus Ihrem '
+                                                                 'Arbeitsbereich.',
+                                                           'es': 'Elige una conversación '
+                                                                 'disponible en tu espacio de '
+                                                                 'trabajo.',
+                                                           'fr': 'Choisissez une conversation '
+                                                                 'disponible dans votre espace de '
+                                                                 'travail.',
+                                                           'ja': 'ワークスペースから利用可能な会話を選んでください。',
+                                                           'ko': '작업 공간에서 사용 가능한 대화를 선택하세요.',
+                                                           'zh-Hans': '请从工作区选择可用的会话。'}})
+
+NEW_STRINGS.update({'Jonwork': {'de': 'Jonwork',
+             'es': 'Jonwork',
+             'fr': 'Jonwork',
+             'ja': 'Jonwork',
+             'ko': 'Jonwork',
+             'zh-Hans': 'Jonwork'}})
+
+NEW_STRINGS.update({'Visualization Preview': {'de': 'Visualisierungsvorschau',
+                           'es': 'Vista previa de visualización',
+                           'fr': 'Aperçu de la visualisation',
+                           'ja': '可視化プレビュー',
+                           'ko': '시각화 미리보기',
+                           'zh-Hans': '可视化预览'},
+ 'Unable to Render Preview': {'de': 'Vorschau kann nicht dargestellt werden',
+                              'es': 'No se puede mostrar la vista previa',
+                              'fr': 'Impossible d’afficher l’aperçu',
+                              'ja': 'プレビューを表示できません',
+                              'ko': '미리보기를 표시할 수 없음',
+                              'zh-Hans': '无法渲染预览'},
+ 'Original Metadata': {'de': 'Originalmetadaten',
+                       'es': 'Metadatos originales',
+                       'fr': 'Métadonnées d’origine',
+                       'ja': '元のメタデータ',
+                       'ko': '원본 메타데이터',
+                       'zh-Hans': '原始元数据'},
+ 'Share Image': {'de': 'Bild teilen',
+                 'es': 'Compartir imagen',
+                 'fr': 'Partager l’image',
+                 'ja': '画像を共有',
+                 'ko': '이미지 공유',
+                 'zh-Hans': '分享图片'}})
 
 if __name__ == "__main__":
     file_path = sys.argv[1] if len(sys.argv) > 1 else default_file_path()

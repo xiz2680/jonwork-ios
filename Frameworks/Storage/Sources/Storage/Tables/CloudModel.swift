@@ -102,8 +102,8 @@ public final class CloudModel: Identifiable, Codable, Equatable, Hashable, Table
         endpoint: String = "",
         token: String = "",
         headers: [String: String] = [
-            "HTTP-Referer": "https://flowdown.ai/",
-            "X-Title": "FlowDown",
+            "HTTP-Referer": "https://github.com/xiz2680/jonwork-ios",
+            "X-Title": "Jonwork",
         ],
         bodyFields: String = "",
         context: ModelContextLength = .medium_64k,

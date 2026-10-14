@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		506575872EE6568B008EBAC6 /* FlowDownModelExchange in Frameworks */ = {isa = PBXBuildFile; productRef = 506575862EE6568B008EBAC6 /* FlowDownModelExchange */; };
+		506575872EE6568B008EBAC6 /* JonworkModelExchange in Frameworks */ = {isa = PBXBuildFile; productRef = 506575862EE6568B008EBAC6 /* JonworkModelExchange */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,7 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				506575872EE6568B008EBAC6 /* FlowDownModelExchange in Frameworks */,
+				506575872EE6568B008EBAC6 /* JonworkModelExchange in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,7 +91,7 @@
 			);
 			name = ModelExchange;
 			packageProductDependencies = (
-				506575862EE6568B008EBAC6 /* FlowDownModelExchange */,
+				506575862EE6568B008EBAC6 /* JonworkModelExchange */,
 			);
 			productName = ModelExchange;
 			productReference = 50EA4DBD2EE65615008AD512 /* ModelExchange.app */;
@@ -388,9 +388,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		506575862EE6568B008EBAC6 /* FlowDownModelExchange */ = {
+		506575862EE6568B008EBAC6 /* JonworkModelExchange */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = FlowDownModelExchange;
+			productName = JonworkModelExchange;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

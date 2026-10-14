@@ -22,7 +22,7 @@ public final class LogStore: @unchecked Sendable {
         queue: DispatchQueue? = nil,
         maxFileSize: Int = 5 * 1024 * 1024,
         maxFiles: Int = 5,
-        fileName: String = "FlowDown.log",
+        fileName: String = "Jonwork.log",
     ) {
         self.fileManager = fileManager
         self.maxFileSize = maxFileSize

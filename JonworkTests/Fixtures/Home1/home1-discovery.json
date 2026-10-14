@@ -1,0 +1,23 @@
+{
+  "contract": "jonwork-home/1.0",
+  "apiVersion": "1.0",
+  "authentication": {
+    "type": "oauth2_authorization_code",
+    "clientId": "jonwork-ios",
+    "scopes": [
+      "home.read"
+    ],
+    "pkceMethods": [
+      "S256"
+    ],
+    "authorizationEndpoint": "https://gateway.example.test/v1/home/auth/authorize",
+    "tokenEndpoint": "https://gateway.example.test/v1/home/auth/token",
+    "revocationEndpoint": "https://gateway.example.test/v1/home/auth/revoke",
+    "refreshTokenRotation": "required",
+    "accessTokenLifetimeSeconds": 900
+  },
+  "handshakePath": "/v1/home/handshake",
+  "capabilities": {
+    "mutations": false
+  }
+}

@@ -10,7 +10,7 @@ while [[ ! -d .git ]] && [[ "$(pwd)" != "/" ]]; do
     cd ..
 done
 
-if [[ -d .git ]] && [[ -d FlowDown.xcworkspace ]]; then
+if [[ -d .git ]] && [[ -d Jonwork.xcworkspace ]]; then
     echo "[+] found project root: $(pwd)"
 else
     echo "[-] could not find project root"
@@ -25,7 +25,7 @@ if [[ ! "$BUILD_NUMBER" =~ '^[1-9][0-9]*$' ]]; then
     exit 1
 fi
 
-CURRENT_BUILD_NUMBER=$(awk -F= '/^CURRENT_PROJECT_VERSION/ {gsub(/[^0-9]/, "", $2); print $2}' FlowDown/Configuration/Version.xcconfig)
+CURRENT_BUILD_NUMBER=$(awk -F= '/^CURRENT_PROJECT_VERSION/ {gsub(/[^0-9]/, "", $2); print $2}' Jonwork/Configuration/Version.xcconfig)
 if [[ ! "$CURRENT_BUILD_NUMBER" =~ '^[1-9][0-9]*$' ]]; then
     echo "[-] could not read CURRENT_PROJECT_VERSION"
     exit 1
@@ -48,8 +48,8 @@ fi
 
 archive_ios() {
     XCBUILD_LABEL=archive-ios ./Resources/DevKit/scripts/run_xcodebuild.sh \
-        -workspace FlowDown.xcworkspace \
-        -scheme FlowDown \
+        -workspace Jonwork.xcworkspace \
+        -scheme Jonwork \
         -configuration Release \
         -destination 'generic/platform=iOS' \
         -archivePath "$PROJECT_ROOT/.build/Jonwork.xcarchive" \
@@ -62,8 +62,8 @@ archive_ios() {
 
 archive_macos() {
     XCBUILD_LABEL=archive-macos ./Resources/DevKit/scripts/run_xcodebuild.sh \
-        -workspace FlowDown.xcworkspace \
-        -scheme FlowDown \
+        -workspace Jonwork.xcworkspace \
+        -scheme Jonwork \
         -configuration Release \
         -destination "$CATALYST_ARCHIVE_DESTINATION" \
         -archivePath "$PROJECT_ROOT/.build/Jonwork-macOS.xcarchive" \

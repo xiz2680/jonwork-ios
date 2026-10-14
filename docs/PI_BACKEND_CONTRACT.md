@@ -1,5 +1,11 @@
 # Pi Backend Integration Contract
 
+## XIZ-134 Home boundary
+
+The Pi1.0 contract below remains a separate runtime boundary. It does not establish parity with DeepTutor Home. The approved Home1 adapter increment is being developed alongside Pi1.0, binding signed main-site subject, personal/enterprise scope, workspace and membership validity to the native OAuth family. Native transport converts authoritative Home session/message/branch/event identifiers behind domain adapters; Home IDs must never be sent to Pi session routes.
+
+Read-only handshake/history/snapshot/replay support is distinct from mutation support. Research/visualize, references/documents, branching/regeneration/turn deletion, clarification and notebook writes require real Home runtime operations and common web/native writer, revision, idempotency and consent admission. Capability discovery must fail closed until those paths exist; no mode labels, synthetic usage, fake receipts or local transcript mutations substitute for them. Unknown usage remains absent or null. New adapters require independent security review and final native validation before acceptance.
+
 ## Boundary
 
 The iOS app connects through a versioned Pi gateway abstraction. Pi owns models, credentials, agent execution, tools, durable session files, and concurrency semantics. The app owns presentation, local connection profiles, Keychain references, and transient UI state.
@@ -18,7 +24,7 @@ Pi gateway / Pi agent runtime
 
 ## Backend Reality and Delivery Decision
 
-The versioned Jonwork gateway exposes the `pi-gateway/1.0` contract, OAuth 2 authorization-code authentication with PKCE, authoritative snapshots, replayable SSE, idempotent mutations, controller ownership, and capability/limit discovery. UIKit remains independent of the wire format: `PiServiceProtocol` is the replaceable transport boundary, `PiEventAdapter` validates ordered events, `PiSessionReducer` owns deterministic state transitions, and FlowDown views consume presentation models only.
+The versioned Jonwork gateway exposes the `pi-gateway/1.0` contract, OAuth 2 authorization-code authentication with PKCE, authoritative snapshots, replayable SSE, idempotent mutations, controller ownership, and capability/limit discovery. UIKit remains independent of the wire format: `PiServiceProtocol` is the replaceable transport boundary, `PiEventAdapter` validates ordered events, `PiSessionReducer` owns deterministic state transitions, and Jonwork views consume presentation models only.
 
 The client must fail closed when a required capability is absent. It must never silently downgrade a requested Pi agent session to stateless chat completions.
 

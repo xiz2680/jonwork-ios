@@ -27,7 +27,7 @@ private enum SyncPayloadCoder {
 
 // MARK: - Sync
 
-struct FlowDownPayloadHeader {
+struct JonworkPayloadHeader {
     static let CompressionThreshold: Int = 1024
     static let magic: [UInt8] = [0x46, 0x6C, 0x6F, 0x77, 0x44, 0x6F, 0x77, 0x6E] // "FlowDown"
     static let version: UInt8 = 1
@@ -54,25 +54,25 @@ struct FlowDownPayloadHeader {
 
     /// 序列化为 Data
     func encode() -> Data {
-        var data = Data(FlowDownPayloadHeader.magic)
-        data.append(FlowDownPayloadHeader.version)
+        var data = Data(JonworkPayloadHeader.magic)
+        data.append(JonworkPayloadHeader.version)
         data.append(compressionAlgorithm.rawValue)
         return data
     }
 
     /// 从 Data 解析 header
-    static func decode(from data: Data) throws -> (header: FlowDownPayloadHeader, payloadOffset: Int) {
+    static func decode(from data: Data) throws -> (header: JonworkPayloadHeader, payloadOffset: Int) {
         guard data.count >= 10 else {
             throw NSError(domain: "CompressionHeader", code: -1, userInfo: [NSLocalizedDescriptionKey: "Data too short"])
         }
 
         let magic = Array(data[0 ..< 8])
-        guard magic == FlowDownPayloadHeader.magic else {
+        guard magic == JonworkPayloadHeader.magic else {
             throw NSError(domain: "CompressionHeader", code: -2, userInfo: [NSLocalizedDescriptionKey: "Invalid magic number"])
         }
 
         let version = data[8]
-        guard version == FlowDownPayloadHeader.version else {
+        guard version == JonworkPayloadHeader.version else {
             throw NSError(domain: "CompressionHeader", code: -3, userInfo: [NSLocalizedDescriptionKey: "Unsupported version"])
         }
 
@@ -81,7 +81,7 @@ struct FlowDownPayloadHeader {
             throw NSError(domain: "CompressionHeader", code: -4, userInfo: [NSLocalizedDescriptionKey: "Unknown algorithm"])
         }
 
-        return (FlowDownPayloadHeader(compressionAlgorithm: alg), 10)
+        return (JonworkPayloadHeader(compressionAlgorithm: alg), 10)
     }
 }
 
@@ -89,9 +89,9 @@ extension Storage {
     static func encodePayloadSyncable(_ value: some Codable) throws -> Data {
         let plistData = try SyncPayloadCoder.encoder.encode(value)
 
-        var header = FlowDownPayloadHeader(compressionAlgorithm: FlowDownPayloadHeader.Algorithm.none)
-        if plistData.count >= FlowDownPayloadHeader.CompressionThreshold, let compressed = plistData.compressed(using: COMPRESSION_LZFSE) {
-            header.compressionAlgorithm = FlowDownPayloadHeader.Algorithm.lzfse
+        var header = JonworkPayloadHeader(compressionAlgorithm: JonworkPayloadHeader.Algorithm.none)
+        if plistData.count >= JonworkPayloadHeader.CompressionThreshold, let compressed = plistData.compressed(using: COMPRESSION_LZFSE) {
+            header.compressionAlgorithm = JonworkPayloadHeader.Algorithm.lzfse
             let headerData = header.encode()
             var result = Data(headerData)
             result.append(compressed)
@@ -109,7 +109,7 @@ extension Storage {
             throw NSError(domain: "Storage.decodePayloadSyncable", code: -100, userInfo: [NSLocalizedDescriptionKey: "Empty data"])
         }
 
-        let (header, offset) = try FlowDownPayloadHeader.decode(from: data)
+        let (header, offset) = try JonworkPayloadHeader.decode(from: data)
         let payload = data.subdata(in: offset ..< data.count)
 
         let plistData: Data

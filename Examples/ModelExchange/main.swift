@@ -5,12 +5,12 @@
 //  Created by qaq on 8/12/2025.
 //
 
-import FlowDownModelExchange
+import JonworkModelExchange
 import SwiftUI
 
-FlowDownModelExchangeExampleApp.main()
+JonworkModelExchangeExampleApp.main()
 
-struct FlowDownModelExchangeExampleApp: App {
+struct JonworkModelExchangeExampleApp: App {
     @State private var keyPair = ModelExchangeKeyPair()
     @State private var sessionId: String?
     @State private var status: String = "Idle"
@@ -50,7 +50,7 @@ private struct ExampleView: View {
 
     private var builder: ModelExchangeRequestBuilder {
         ModelExchangeRequestBuilder(
-            flowdownScheme: "flowdown",
+            jonworkScheme: "jonwork",
             callbackScheme: callbackScheme,
             keyPair: keyPair,
         )
@@ -63,7 +63,7 @@ private struct ExampleView: View {
     var body: some View {
         List {
             Section("Flow") {
-                Button("Start handshake with FlowDown") {
+                Button("Start handshake with Jonwork") {
                     startHandshake()
                 }
                 Button("Rotate key pair") {
@@ -161,7 +161,7 @@ private struct ExampleView: View {
             status = "Handshake URL unavailable"
             return
         }
-        status = "Opening FlowDown for verification"
+        status = "Opening Jonwork for verification"
         openURL(url)
     }
 
@@ -182,7 +182,7 @@ private struct ExampleView: View {
             handleCompletion(dict: dict)
         case "cancelled":
             sessionId = nil
-            status = "User cancelled in FlowDown"
+            status = "User cancelled in Jonwork"
         default:
             status = "Unknown callback stage"
         }
@@ -231,12 +231,12 @@ private struct ExampleView: View {
             let signed = try builder.makeExchangeURL(
                 session: session,
                 appName: "Example Integrator",
-                reason: "Request models from FlowDown",
+                reason: "Request models from Jonwork",
                 capabilities: Array(selectedCapabilities),
                 multipleSelection: false,
             )
             lastExchangeURL = signed.url.absoluteString
-            status = "Opening FlowDown to pick models"
+            status = "Opening Jonwork to pick models"
             openURL(signed.url)
         } catch {
             status = "Build request failed: \(error.localizedDescription)"

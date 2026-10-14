@@ -136,7 +136,7 @@ struct LogStoreTests {
         let legacyDirectory = LogStore.logDirectory(baseDirectory: legacyBase)
         try FileManager.default.createDirectory(at: legacyDirectory, withIntermediateDirectories: true)
         FileManager.default.createFile(
-            atPath: legacyDirectory.appendingPathComponent("FlowDown.log").path,
+            atPath: legacyDirectory.appendingPathComponent("Jonwork.log").path,
             contents: Data("legacy".utf8),
         )
 

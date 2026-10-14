@@ -61,7 +61,7 @@ jobs:
           PROVISIONING_PROFILE_SPECIFIER: ${{ env.PROVISIONING_PROFILE_SPECIFIER }}
           ENABLE_NOTARIZE: "1"
           VERSION: ${{ env.VERSION }}
-          NOTARIZE_ZIP_OUTPUT: ${{ format('{0}/BuildArtifacts/FlowDown-{1}.zip', github.workspace, env.VERSION) }}
+          NOTARIZE_ZIP_OUTPUT: ${{ format('{0}/BuildArtifacts/Jonwork-{1}.zip', github.workspace, env.VERSION) }}
         run: |
           set -euo pipefail
           ./Resources/DevKit/scripts/notary-action.sh "$GITHUB_OUTPUT"
@@ -69,9 +69,9 @@ jobs:
         if: steps.tag_check.outputs.ok == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: FlowDown-${{ env.VERSION }}-build-pre-notarize
+          name: Jonwork-${{ env.VERSION }}-build-pre-notarize
           path: |
-            BuildArtifacts/FlowDown-macos.xcarchive
+            BuildArtifacts/Jonwork-macos.xcarchive
             BuildArtifacts/macos-notary.xcresult
           if-no-files-found: error
           retention-days: 7
@@ -98,12 +98,12 @@ jobs:
             echo "ZIP not found at $ZIP_PATH" >&2
             exit 1
           fi
-          gh release upload "${VERSION}" "$ZIP_PATH#FlowDown-${VERSION}.zip" --clobber
+          gh release upload "${VERSION}" "$ZIP_PATH#Jonwork-${VERSION}.zip" --clobber
       - name: Upload notarized ZIP as artifact
         if: steps.tag_check.outputs.ok == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: FlowDown-${{ env.VERSION }}-notarized-zip
+          name: Jonwork-${{ env.VERSION }}-notarized-zip
           path: ${{ steps.notarize_action.outputs.zip_path }}
           if-no-files-found: error
           retention-days: 7
